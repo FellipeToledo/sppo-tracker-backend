@@ -1,8 +1,12 @@
 package com.fajtech.sppotracker.infrastructure.adapter.out.redis;
 
+import com.fajtech.sppotracker.domain.vehicle.ClassificationTag;
+import com.fajtech.sppotracker.domain.vehicle.ClassifiedVehiclePosition;
 import com.fajtech.sppotracker.domain.vehicle.Coordinates;
+import com.fajtech.sppotracker.domain.vehicle.PositionClassification;
 import com.fajtech.sppotracker.domain.vehicle.PositionSource;
 import com.fajtech.sppotracker.domain.vehicle.VehiclePosition;
+import com.fajtech.sppotracker.domain.vehicle.VehiclePositionStatus;
 import com.fajtech.sppotracker.infrastructure.config.CurrentSnapshotProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -15,6 +19,7 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.eq;
@@ -41,8 +46,8 @@ class RedisCurrentSnapshotStoreTest {
                 new CurrentSnapshotProperties(TTL));
     }
 
-    private static VehiclePosition position() {
-        return VehiclePosition.builder()
+    private static ClassifiedVehiclePosition snapshot() {
+        VehiclePosition position = VehiclePosition.builder()
                 .vehicleId("A12345")
                 .serviceCode("100")
                 .coordinates(new Coordinates(new BigDecimal("-22.89206"), new BigDecimal("-43.17654")))
@@ -54,27 +59,31 @@ class RedisCurrentSnapshotStoreTest {
                 .receivedAt(Instant.parse("2026-07-22T12:00:06Z"))
                 .source(PositionSource.DADOS_MOBILIDADE_RIO)
                 .build();
+        PositionClassification classification = PositionClassification.from(
+                VehiclePositionStatus.STALE,
+                Set.of(ClassificationTag.STALE, ClassificationTag.OUT_OF_ROUTE));
+        return new ClassifiedVehiclePosition(position, classification);
     }
 
     @Test
     void shouldSaveSerializedSnapshotWithTtl() throws Exception {
-        VehiclePosition position = position();
+        ClassifiedVehiclePosition snapshot = snapshot();
 
-        store.save(position);
+        store.save(snapshot);
 
         verify(valueOps).set(eq("gps:snapshot:A12345"),
-                eq(objectMapper.writeValueAsString(position)), eq(TTL));
+                eq(objectMapper.writeValueAsString(snapshot)), eq(TTL));
     }
 
     @Test
     void shouldFindAndDeserializeSnapshot() throws Exception {
-        VehiclePosition position = position();
+        ClassifiedVehiclePosition snapshot = snapshot();
         when(valueOps.get("gps:snapshot:A12345"))
-                .thenReturn(objectMapper.writeValueAsString(position));
+                .thenReturn(objectMapper.writeValueAsString(snapshot));
 
-        Optional<VehiclePosition> found = store.find("A12345");
+        Optional<ClassifiedVehiclePosition> found = store.find("A12345");
 
-        assertThat(found).contains(position);
+        assertThat(found).contains(snapshot);
     }
 
     @Test
