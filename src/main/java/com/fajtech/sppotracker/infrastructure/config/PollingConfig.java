@@ -6,6 +6,7 @@ import com.fajtech.sppotracker.application.port.out.CurrentSnapshotStorePort;
 import com.fajtech.sppotracker.application.port.out.DeduplicationPort;
 import com.fajtech.sppotracker.application.port.out.FetchExternalGpsPositionsPort;
 import com.fajtech.sppotracker.application.port.out.ProviderReadinessPort;
+import com.fajtech.sppotracker.application.port.out.PublishVehiclePositionEventPort;
 import com.fajtech.sppotracker.domain.vehicle.PositionChangeDetector;
 import com.fajtech.sppotracker.domain.vehicle.PositionClassifier;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -33,8 +34,10 @@ public class PollingConfig {
                                                    PositionChangeDetector changeDetector,
                                                    PositionClassifier classifier,
                                                    CurrentSnapshotStorePort snapshotStore,
+                                                   PublishVehiclePositionEventPort eventPublisher,
                                                    Clock clock) {
-        return new GpsPositionIngestor(deduplication, changeDetector, classifier, snapshotStore, clock);
+        return new GpsPositionIngestor(deduplication, changeDetector, classifier,
+                snapshotStore, eventPublisher, clock);
     }
 
     @Bean

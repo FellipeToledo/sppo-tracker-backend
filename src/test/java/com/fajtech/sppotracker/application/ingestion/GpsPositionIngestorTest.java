@@ -2,6 +2,7 @@ package com.fajtech.sppotracker.application.ingestion;
 
 import com.fajtech.sppotracker.application.port.out.CurrentSnapshotStorePort;
 import com.fajtech.sppotracker.application.port.out.DeduplicationPort;
+import com.fajtech.sppotracker.application.port.out.PublishVehiclePositionEventPort;
 import com.fajtech.sppotracker.domain.vehicle.ClassifiedVehiclePosition;
 import com.fajtech.sppotracker.domain.vehicle.Coordinates;
 import com.fajtech.sppotracker.domain.vehicle.PositionChangeDetector;
@@ -37,16 +38,18 @@ class GpsPositionIngestorTest {
 
     private DeduplicationPort deduplication;
     private CurrentSnapshotStorePort snapshotStore;
+    private PublishVehiclePositionEventPort eventPublisher;
     private GpsPositionIngestor ingestor;
 
     @BeforeEach
     void setUp() {
         deduplication = mock(DeduplicationPort.class);
         snapshotStore = mock(CurrentSnapshotStorePort.class);
+        eventPublisher = mock(PublishVehiclePositionEventPort.class);
         // classifier sem regras → IN_OPERATION; a classificação tem testes próprios
         PositionClassifier classifier = new PositionClassifier(List.of());
         ingestor = new GpsPositionIngestor(deduplication, new PositionChangeDetector(), classifier,
-                snapshotStore, Clock.fixed(T2, ZoneOffset.UTC));
+                snapshotStore, eventPublisher, Clock.fixed(T2, ZoneOffset.UTC));
         when(deduplication.isDuplicate(any())).thenReturn(false);
         when(snapshotStore.find(any())).thenReturn(Optional.empty());
     }
@@ -76,6 +79,13 @@ class GpsPositionIngestorTest {
         return captor.getAllValues().stream().map(ClassifiedVehiclePosition::position).toList();
     }
 
+    private List<VehiclePosition> publishedPositions() {
+        ArgumentCaptor<ClassifiedVehiclePosition> captor =
+                ArgumentCaptor.forClass(ClassifiedVehiclePosition.class);
+        verify(eventPublisher, org.mockito.Mockito.atLeast(0)).publish(captor.capture());
+        return captor.getAllValues().stream().map(ClassifiedVehiclePosition::position).toList();
+    }
+
     @Test
     void shouldSaveNewChangedPositions() {
         VehiclePosition p1 = position("A1", T1, "-22.90");
@@ -85,6 +95,7 @@ class GpsPositionIngestorTest {
 
         assertThat(result).isEqualTo(new IngestionResult(2, 0, 0, 2));
         assertThat(savedPositions()).containsExactly(p1, p2);
+        assertThat(publishedPositions()).containsExactly(p1, p2);
     }
 
     @Test
@@ -97,6 +108,7 @@ class GpsPositionIngestorTest {
         assertThat(result).isEqualTo(new IngestionResult(1, 1, 0, 0));
         verify(snapshotStore, never()).find(any());
         verify(snapshotStore, never()).save(any());
+        verify(eventPublisher, never()).publish(any());
     }
 
     @Test
@@ -109,6 +121,7 @@ class GpsPositionIngestorTest {
 
         assertThat(result).isEqualTo(new IngestionResult(1, 0, 1, 0));
         verify(snapshotStore, never()).save(any());
+        verify(eventPublisher, never()).publish(any());
     }
 
     @Test
@@ -121,6 +134,7 @@ class GpsPositionIngestorTest {
 
         assertThat(result).isEqualTo(new IngestionResult(1, 0, 0, 1));
         assertThat(savedPositions()).containsExactly(candidate);
+        assertThat(publishedPositions()).containsExactly(candidate);
     }
 
     @Test
@@ -135,6 +149,7 @@ class GpsPositionIngestorTest {
 
         assertThat(result).isEqualTo(new IngestionResult(3, 1, 1, 1));
         assertThat(savedPositions()).containsExactly(changed);
+        assertThat(publishedPositions()).containsExactly(changed);
     }
 
     @Test
