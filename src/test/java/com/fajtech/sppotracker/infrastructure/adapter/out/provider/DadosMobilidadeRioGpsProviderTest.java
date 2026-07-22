@@ -2,6 +2,7 @@ package com.fajtech.sppotracker.infrastructure.adapter.out.provider;
 
 import com.fajtech.sppotracker.domain.vehicle.VehiclePosition;
 import com.fajtech.sppotracker.infrastructure.config.DadosRioProviderProperties;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
 import okhttp3.mockwebserver.RecordedRequest;
@@ -27,6 +28,7 @@ class DadosMobilidadeRioGpsProviderTest {
     private static final Instant TO = Instant.parse("2026-07-22T12:01:30Z");   // 09:01:30 BRT
 
     private MockWebServer server;
+    private SimpleMeterRegistry registry;
     private DadosMobilidadeRioGpsProvider provider;
 
     @BeforeEach
@@ -44,7 +46,12 @@ class DadosMobilidadeRioGpsProviderTest {
                 Duration.ofMillis(1));
         DadosMobilidadeRioGpsMapper mapper =
                 new DadosMobilidadeRioGpsMapper(Clock.fixed(Instant.parse("2026-07-22T12:00:05Z"), ZoneOffset.UTC));
-        provider = new DadosMobilidadeRioGpsProvider(WebClient.builder(), props, mapper);
+        registry = new SimpleMeterRegistry();
+        provider = new DadosMobilidadeRioGpsProvider(WebClient.builder(), props, mapper, registry);
+    }
+
+    private double requests(String outcome) {
+        return registry.get("gps.provider.requests").tag("outcome", outcome).counter().count();
     }
 
     @AfterEach
@@ -73,6 +80,11 @@ class DadosMobilidadeRioGpsProviderTest {
         assertThat(request.getRequestUrl().encodedPath()).isEqualTo("/gps/sppo");
         assertThat(request.getRequestUrl().queryParameter("dataInicial")).isEqualTo("2026-07-22 09:00:00");
         assertThat(request.getRequestUrl().queryParameter("dataFinal")).isEqualTo("2026-07-22 09:01:30");
+
+        // métricas: sucesso, timer e janela (90s) registrados
+        assertThat(requests("success")).isEqualTo(1.0);
+        assertThat(registry.get("gps.provider.request.duration").timer().count()).isEqualTo(1L);
+        assertThat(registry.get("gps.provider.window.seconds").summary().totalAmount()).isEqualTo(90.0);
     }
 
     @Test
@@ -112,6 +124,8 @@ class DadosMobilidadeRioGpsProviderTest {
 
         assertThatThrownBy(() -> provider.fetch(FROM, TO)).isInstanceOf(RuntimeException.class);
         assertThat(server.getRequestCount()).isEqualTo(3);
+        assertThat(requests("failure")).isEqualTo(1.0);
+        assertThat(requests("success")).isZero();
     }
 
     @Test

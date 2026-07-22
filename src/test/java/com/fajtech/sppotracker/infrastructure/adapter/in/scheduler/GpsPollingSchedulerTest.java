@@ -1,8 +1,10 @@
 package com.fajtech.sppotracker.infrastructure.adapter.in.scheduler;
 
 import com.fajtech.sppotracker.application.polling.PollingCycleResult;
-import com.fajtech.sppotracker.application.polling.PollingOutcome;
+import com.fajtech.sppotracker.application.polling.PollingSkipReason;
 import com.fajtech.sppotracker.application.port.in.RunGpsPollingCycleUseCase;
+import com.fajtech.sppotracker.infrastructure.observability.PollingMetrics;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
@@ -12,43 +14,41 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-/** O scheduler apenas delega ao caso de uso (adapter fino, sem regra). */
+/** O scheduler apenas delega ao caso de uso e registra a métrica (adapter fino). */
 class GpsPollingSchedulerTest {
 
-    @Test
-    void shouldDelegateToUseCase() {
-        RunGpsPollingCycleUseCase useCase = mock(RunGpsPollingCycleUseCase.class);
-        when(useCase.runCycle()).thenReturn(PollingCycleResult.success(
-                Instant.parse("2026-07-22T11:58:30Z"), Instant.parse("2026-07-22T12:00:00Z"),
-                3, Instant.parse("2026-07-22T12:00:00Z"), Duration.ofMillis(5)));
+    private RunGpsPollingCycleUseCase useCase;
+    private PollingMetrics pollingMetrics;
+    private GpsPollingScheduler scheduler;
 
-        new GpsPollingScheduler(useCase).poll();
-
-        verify(useCase).runCycle();
+    @BeforeEach
+    void setUp() {
+        useCase = mock(RunGpsPollingCycleUseCase.class);
+        pollingMetrics = mock(PollingMetrics.class);
+        scheduler = new GpsPollingScheduler(useCase, pollingMetrics);
     }
 
     @Test
-    void shouldNotThrowWhenCycleSkipped() {
-        RunGpsPollingCycleUseCase useCase = mock(RunGpsPollingCycleUseCase.class);
-        when(useCase.runCycle()).thenReturn(PollingCycleResult.skipped(
-                com.fajtech.sppotracker.application.polling.PollingSkipReason.FAILURE_COOLDOWN,
-                3, Instant.parse("2026-07-22T12:00:00Z"), Duration.ZERO));
-
-        new GpsPollingScheduler(useCase).poll();
-
-        verify(useCase).runCycle();
-    }
-
-    @Test
-    void shouldPropagateOutcomeType() {
-        RunGpsPollingCycleUseCase useCase = mock(RunGpsPollingCycleUseCase.class);
-        PollingCycleResult result = PollingCycleResult.failure(
+    void shouldDelegateToUseCaseAndRecordMetric() {
+        PollingCycleResult result = PollingCycleResult.success(
                 Instant.parse("2026-07-22T11:58:30Z"), Instant.parse("2026-07-22T12:00:00Z"),
-                1, Instant.parse("2026-07-22T12:00:00Z"), Duration.ofMillis(2), "boom");
+                3, Instant.parse("2026-07-22T12:00:00Z"), Duration.ofMillis(5));
         when(useCase.runCycle()).thenReturn(result);
 
-        new GpsPollingScheduler(useCase).poll();
+        scheduler.poll();
 
-        org.assertj.core.api.Assertions.assertThat(result.outcome()).isEqualTo(PollingOutcome.FAILURE);
+        verify(useCase).runCycle();
+        verify(pollingMetrics).record(result);
+    }
+
+    @Test
+    void shouldRecordMetricWhenCycleSkipped() {
+        PollingCycleResult result = PollingCycleResult.skipped(
+                PollingSkipReason.FAILURE_COOLDOWN, 3, Instant.parse("2026-07-22T12:00:00Z"), Duration.ZERO);
+        when(useCase.runCycle()).thenReturn(result);
+
+        scheduler.poll();
+
+        verify(pollingMetrics).record(result);
     }
 }

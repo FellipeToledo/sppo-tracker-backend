@@ -5,6 +5,7 @@ import com.fajtech.sppotracker.application.polling.GpsPollingService;
 import com.fajtech.sppotracker.application.port.out.CurrentSnapshotStorePort;
 import com.fajtech.sppotracker.application.port.out.DeduplicationPort;
 import com.fajtech.sppotracker.application.port.out.FetchExternalGpsPositionsPort;
+import com.fajtech.sppotracker.application.port.out.IngestionMetricsPort;
 import com.fajtech.sppotracker.application.port.out.ProviderReadinessPort;
 import com.fajtech.sppotracker.application.port.out.PublishVehiclePositionEventPort;
 import com.fajtech.sppotracker.domain.vehicle.PositionChangeDetector;
@@ -35,9 +36,10 @@ public class PollingConfig {
                                                    PositionClassifier classifier,
                                                    CurrentSnapshotStorePort snapshotStore,
                                                    PublishVehiclePositionEventPort eventPublisher,
+                                                   IngestionMetricsPort metrics,
                                                    Clock clock) {
         return new GpsPositionIngestor(deduplication, changeDetector, classifier,
-                snapshotStore, eventPublisher, clock);
+                snapshotStore, eventPublisher, metrics, clock);
     }
 
     @Bean

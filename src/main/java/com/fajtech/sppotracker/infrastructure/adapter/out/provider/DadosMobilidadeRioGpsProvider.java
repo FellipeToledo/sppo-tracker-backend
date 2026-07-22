@@ -3,6 +3,10 @@ package com.fajtech.sppotracker.infrastructure.adapter.out.provider;
 import com.fajtech.sppotracker.application.port.out.FetchExternalGpsPositionsPort;
 import com.fajtech.sppotracker.domain.vehicle.VehiclePosition;
 import com.fajtech.sppotracker.infrastructure.config.DadosRioProviderProperties;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.DistributionSummary;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.ExchangeStrategies;
@@ -11,6 +15,7 @@ import org.springframework.web.reactive.function.client.WebClientRequestExceptio
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 import reactor.util.retry.Retry;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -44,9 +49,15 @@ public class DadosMobilidadeRioGpsProvider implements FetchExternalGpsPositionsP
     private final DadosMobilidadeRioGpsMapper mapper;
     private final DateTimeFormatter filterFormatter;
 
+    private final Counter requestsSuccess;
+    private final Counter requestsFailure;
+    private final Timer requestDuration;
+    private final DistributionSummary windowSeconds;
+
     public DadosMobilidadeRioGpsProvider(WebClient.Builder webClientBuilder,
                                          DadosRioProviderProperties properties,
-                                         DadosMobilidadeRioGpsMapper mapper) {
+                                         DadosMobilidadeRioGpsMapper mapper,
+                                         MeterRegistry registry) {
         this.properties = properties;
         this.mapper = mapper;
         this.filterFormatter = FILTER_FORMAT.withZone(properties.zoneId());
@@ -57,24 +68,40 @@ public class DadosMobilidadeRioGpsProvider implements FetchExternalGpsPositionsP
                 .baseUrl(properties.baseUrl())
                 .exchangeStrategies(strategies)
                 .build();
+        this.requestsSuccess = Counter.builder("gps.provider.requests").tag("outcome", "success").register(registry);
+        this.requestsFailure = Counter.builder("gps.provider.requests").tag("outcome", "failure").register(registry);
+        this.requestDuration = Timer.builder("gps.provider.request.duration")
+                .description("Duração da chamada ao provider (incl. retries)").register(registry);
+        this.windowSeconds = DistributionSummary.builder("gps.provider.window.seconds")
+                .description("Amplitude da janela solicitada ao provider").baseUnit("seconds").register(registry);
     }
 
     @Override
     public List<VehiclePosition> fetch(Instant from, Instant to) {
-        List<DadosMobilidadeRioGpsItem> items = webClient.get()
-                .uri(uriBuilder -> uriBuilder
-                        .path(properties.path())
-                        .queryParam("dataInicial", filterFormatter.format(from))
-                        .queryParam("dataFinal", filterFormatter.format(to))
-                        .build())
-                .retrieve()
-                .bodyToMono(ITEM_LIST)
-                .timeout(properties.requestTimeout())
-                .retryWhen(Retry.backoff(properties.retryMaxAttempts(), properties.retryBackoff())
-                        .filter(DadosMobilidadeRioGpsProvider::isTransient))
-                .blockOptional()
-                .orElseGet(List::of);
-        return mapper.mapAll(items);
+        windowSeconds.record(Duration.between(from, to).toSeconds());
+        Timer.Sample sample = Timer.start();
+        try {
+            List<DadosMobilidadeRioGpsItem> items = webClient.get()
+                    .uri(uriBuilder -> uriBuilder
+                            .path(properties.path())
+                            .queryParam("dataInicial", filterFormatter.format(from))
+                            .queryParam("dataFinal", filterFormatter.format(to))
+                            .build())
+                    .retrieve()
+                    .bodyToMono(ITEM_LIST)
+                    .timeout(properties.requestTimeout())
+                    .retryWhen(Retry.backoff(properties.retryMaxAttempts(), properties.retryBackoff())
+                            .filter(DadosMobilidadeRioGpsProvider::isTransient))
+                    .blockOptional()
+                    .orElseGet(List::of);
+            requestsSuccess.increment();
+            return mapper.mapAll(items);
+        } catch (RuntimeException e) {
+            requestsFailure.increment();
+            throw e;
+        } finally {
+            sample.stop(requestDuration);
+        }
     }
 
     /** Transitório = timeout, erro de conexão, HTTP 5xx ou HTTP 429 (§3.1). */

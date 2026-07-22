@@ -2,6 +2,7 @@ package com.fajtech.sppotracker.application.ingestion;
 
 import com.fajtech.sppotracker.application.port.out.CurrentSnapshotStorePort;
 import com.fajtech.sppotracker.application.port.out.DeduplicationPort;
+import com.fajtech.sppotracker.application.port.out.IngestionMetricsPort;
 import com.fajtech.sppotracker.application.port.out.PublishVehiclePositionEventPort;
 import com.fajtech.sppotracker.domain.vehicle.ClassifiedVehiclePosition;
 import com.fajtech.sppotracker.domain.vehicle.Coordinates;
@@ -39,6 +40,7 @@ class GpsPositionIngestorTest {
     private DeduplicationPort deduplication;
     private CurrentSnapshotStorePort snapshotStore;
     private PublishVehiclePositionEventPort eventPublisher;
+    private IngestionMetricsPort metrics;
     private GpsPositionIngestor ingestor;
 
     @BeforeEach
@@ -46,10 +48,11 @@ class GpsPositionIngestorTest {
         deduplication = mock(DeduplicationPort.class);
         snapshotStore = mock(CurrentSnapshotStorePort.class);
         eventPublisher = mock(PublishVehiclePositionEventPort.class);
+        metrics = mock(IngestionMetricsPort.class);
         // classifier sem regras → IN_OPERATION; a classificação tem testes próprios
         PositionClassifier classifier = new PositionClassifier(List.of());
         ingestor = new GpsPositionIngestor(deduplication, new PositionChangeDetector(), classifier,
-                snapshotStore, eventPublisher, Clock.fixed(T2, ZoneOffset.UTC));
+                snapshotStore, eventPublisher, metrics, Clock.fixed(T2, ZoneOffset.UTC));
         when(deduplication.isDuplicate(any())).thenReturn(false);
         when(snapshotStore.find(any())).thenReturn(Optional.empty());
     }
@@ -155,5 +158,19 @@ class GpsPositionIngestorTest {
     @Test
     void shouldReturnEmptyForEmptyBatch() {
         assertThat(ingestor.ingest(List.of())).isEqualTo(IngestionResult.empty());
+    }
+
+    @Test
+    void shouldRecordMetricsForChangedPositionsOnly() {
+        VehiclePosition changed = position("A1", T1, "-22.90");
+        VehiclePosition duplicate = position("A2", T1, "-22.80");
+        when(deduplication.isDuplicate(duplicate)).thenReturn(true);
+
+        ingestor.ingest(List.of(changed, duplicate));
+
+        verify(metrics).recordBatch(new IngestionResult(2, 1, 0, 1));
+        verify(metrics).recordClassification(VehiclePositionStatus.IN_OPERATION);
+        verify(metrics).recordPositionAge(java.time.Duration.between(T1, T2));
+        org.mockito.Mockito.verifyNoMoreInteractions(metrics);
     }
 }
