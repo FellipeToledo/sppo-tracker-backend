@@ -13,6 +13,9 @@ Prometheus. **Monólito modular com arquitetura hexagonal.**
 > A especificação funcional completa (regras, thresholds, precedências) está em
 > **`docs/regras-de-negocio.md`** — é a fonte da verdade do domínio. Leia antes de
 > implementar regras.
+>
+> **Onde o projeto parou** (o que está pronto, o que foi adiado e o débito técnico):
+> **`docs/estado-do-projeto.md`** — leia ao iniciar uma nova sessão.
 
 ## Comandos
 
