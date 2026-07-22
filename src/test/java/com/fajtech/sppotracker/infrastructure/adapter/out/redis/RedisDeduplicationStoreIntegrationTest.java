@@ -32,7 +32,7 @@ import static org.assertj.core.api.Assertions.assertThat;
                 + "org.springframework.boot.hibernate.autoconfigure.HibernateJpaAutoConfiguration,"
                 + "org.springframework.boot.data.jpa.autoconfigure.DataJpaRepositoriesAutoConfiguration"
 })
-class RedisDeduplicationStoreIT {
+class RedisDeduplicationStoreIntegrationTest {
 
     @Container
     @ServiceConnection(name = "redis")

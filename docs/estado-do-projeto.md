@@ -95,10 +95,12 @@ polígonos de garagem. Por isso ficaram fora:
    `WebClient.Builder` não é autoconfigurado no Boot 4 (servlet) — agora fornecido
    explicitamente em `ProviderConfig`.
 2. **[ENDEREÇADO na CI] Fidelidade Redis/Postgres.** ITs Testcontainers
-   (`*IT`, `@Tag("integration")`): `RedisDeduplicationStoreIT` (SET NX EX + TTL),
-   `RedisCurrentSnapshotStoreIT` (JSON + SCAN), `RouteDeviationEventRepositoryIT`
-   (Flyway V1 + JPA em Postgres real). Excluídos do `mvn test` (surefire) e rodados
-   por `mvn verify` (failsafe) — a **CI do GitHub Actions** os executa (tem Docker).
+   (sufixo `*IntegrationTest`, `@Tag("integration")`):
+   `RedisDeduplicationStoreIntegrationTest` (SET NX EX + TTL),
+   `RedisCurrentSnapshotStoreIntegrationTest` (JSON + SCAN),
+   `RouteDeviationEventRepositoryIntegrationTest` (Flyway V1 + JPA em Postgres real).
+   Surefire (`mvn test`) exclui a tag `integration`; Failsafe (`mvn verify`) roda os
+   `*IntegrationTest` — a **CI do GitHub Actions** os executa (tem Docker).
    ⚠️ **Não foram executados nesta sessão**: o egress bloqueia o pull de imagens
    Docker aqui; a verificação vem da CI do PR.
 3. **`operators.json` é um dataset *starter*** (4 entradas ilustrativas) — precisa

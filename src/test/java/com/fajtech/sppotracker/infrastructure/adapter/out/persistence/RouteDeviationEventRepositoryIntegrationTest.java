@@ -31,7 +31,7 @@ import static org.assertj.core.api.Assertions.assertThat;
                 + "org.springframework.boot.data.redis.autoconfigure.DataRedisAutoConfiguration,"
                 + "org.springframework.boot.data.redis.autoconfigure.DataRedisRepositoriesAutoConfiguration"
 })
-class RouteDeviationEventRepositoryIT {
+class RouteDeviationEventRepositoryIntegrationTest {
 
     @Container
     @ServiceConnection
