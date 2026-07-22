@@ -1,7 +1,9 @@
 package com.fajtech.sppotracker.infrastructure.adapter.in.rest;
 
 import com.fajtech.sppotracker.application.port.in.GetCurrentVehiclePositionsUseCase;
+import com.fajtech.sppotracker.application.port.in.OperatorQueryUseCase;
 import com.fajtech.sppotracker.application.query.VehiclePositionFilter;
+import com.fajtech.sppotracker.domain.operator.Operator;
 import com.fajtech.sppotracker.domain.vehicle.ClassifiedVehiclePosition;
 import com.fajtech.sppotracker.domain.vehicle.Coordinates;
 import com.fajtech.sppotracker.domain.vehicle.PositionClassification;
@@ -18,6 +20,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -38,6 +41,9 @@ class VehiclePositionControllerTest {
     @MockitoBean
     private GetCurrentVehiclePositionsUseCase useCase;
 
+    @MockitoBean
+    private OperatorQueryUseCase operators;
+
     private static ClassifiedVehiclePosition snapshot() {
         VehiclePosition position = VehiclePosition.builder()
                 .vehicleId("A12345")
@@ -54,8 +60,9 @@ class VehiclePositionControllerTest {
     }
 
     @Test
-    void shouldReturnCurrentPositions() throws Exception {
+    void shouldReturnCurrentPositionsWithOperatorLabel() throws Exception {
         when(useCase.getCurrent(any())).thenReturn(List.of(snapshot()));
+        when(operators.resolve("A12345")).thenReturn(Optional.of(new Operator("A123", "Empresa X")));
 
         mockMvc.perform(get("/api/v1/vehicle-positions/current"))
                 .andExpect(status().isOk())
@@ -64,7 +71,8 @@ class VehiclePositionControllerTest {
                 .andExpect(jsonPath("$[0].serviceCode").value("100"))
                 .andExpect(jsonPath("$[0].classificationStatus").value("IN_OPERATION"))
                 .andExpect(jsonPath("$[0].valid").value(true))
-                .andExpect(jsonPath("$[0].latitude").value(-22.9));
+                .andExpect(jsonPath("$[0].latitude").value(-22.9))
+                .andExpect(jsonPath("$[0].operatorName").value("Empresa X"));
     }
 
     @Test

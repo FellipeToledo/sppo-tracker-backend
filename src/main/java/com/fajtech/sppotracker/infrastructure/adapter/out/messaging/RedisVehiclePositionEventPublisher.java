@@ -1,6 +1,8 @@
 package com.fajtech.sppotracker.infrastructure.adapter.out.messaging;
 
+import com.fajtech.sppotracker.application.port.in.OperatorQueryUseCase;
 import com.fajtech.sppotracker.application.port.out.PublishVehiclePositionEventPort;
+import com.fajtech.sppotracker.domain.operator.Operator;
 import com.fajtech.sppotracker.domain.vehicle.ClassifiedVehiclePosition;
 import com.fajtech.sppotracker.infrastructure.adapter.in.rest.dto.VehiclePositionResponse;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -21,17 +23,23 @@ public class RedisVehiclePositionEventPublisher implements PublishVehiclePositio
 
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
+    private final OperatorQueryUseCase operators;
 
-    public RedisVehiclePositionEventPublisher(StringRedisTemplate redisTemplate, ObjectMapper objectMapper) {
+    public RedisVehiclePositionEventPublisher(StringRedisTemplate redisTemplate, ObjectMapper objectMapper,
+                                              OperatorQueryUseCase operators) {
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
+        this.operators = operators;
     }
 
     @Override
     public void publish(ClassifiedVehiclePosition event) {
+        String operatorName = operators.resolve(event.position().vehicleId())
+                .map(Operator::name)
+                .orElse(null);
         String json;
         try {
-            json = objectMapper.writeValueAsString(VehiclePositionResponse.from(event));
+            json = objectMapper.writeValueAsString(VehiclePositionResponse.from(event, operatorName));
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("Falha ao serializar evento de posição do veículo "
                     + event.position().vehicleId(), e);
