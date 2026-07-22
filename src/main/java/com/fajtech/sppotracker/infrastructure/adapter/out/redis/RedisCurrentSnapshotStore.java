@@ -5,9 +5,13 @@ import com.fajtech.sppotracker.domain.vehicle.ClassifiedVehiclePosition;
 import com.fajtech.sppotracker.infrastructure.config.CurrentSnapshotProperties;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.data.redis.core.Cursor;
+import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -19,6 +23,7 @@ import java.util.Optional;
 public class RedisCurrentSnapshotStore implements CurrentSnapshotStorePort {
 
     private static final String KEY_PREFIX = "gps:snapshot:";
+    private static final int SCAN_BATCH = 256;
 
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
@@ -55,6 +60,44 @@ public class RedisCurrentSnapshotStore implements CurrentSnapshotStorePort {
             throw new IllegalStateException("Falha ao serializar snapshot do veículo " + vehicleId, e);
         }
         redisTemplate.opsForValue().set(key(vehicleId), json, properties.currentSnapshotTtl());
+    }
+
+    @Override
+    public List<ClassifiedVehiclePosition> findAll() {
+        List<String> keys = scanKeys();
+        if (keys.isEmpty()) {
+            return List.of();
+        }
+        List<String> values = redisTemplate.opsForValue().multiGet(keys);
+        if (values == null) {
+            return List.of();
+        }
+        List<ClassifiedVehiclePosition> snapshots = new ArrayList<>(values.size());
+        for (String json : values) {
+            if (json != null) {
+                snapshots.add(deserialize(json));
+            }
+        }
+        return snapshots;
+    }
+
+    private List<String> scanKeys() {
+        ScanOptions options = ScanOptions.scanOptions().match(KEY_PREFIX + "*").count(SCAN_BATCH).build();
+        List<String> keys = new ArrayList<>();
+        try (Cursor<String> cursor = redisTemplate.scan(options)) {
+            while (cursor.hasNext()) {
+                keys.add(cursor.next());
+            }
+        }
+        return keys;
+    }
+
+    private ClassifiedVehiclePosition deserialize(String json) {
+        try {
+            return objectMapper.readValue(json, ClassifiedVehiclePosition.class);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Falha ao desserializar snapshot", e);
+        }
     }
 
     private static String key(String vehicleId) {

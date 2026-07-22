@@ -1,6 +1,9 @@
 spring:
   application:
     name: sppo-tracker-backend
+  mvc:
+    problemdetails:
+      enabled: true
   data:
     redis:
       host: ${REDIS_HOST:localhost}

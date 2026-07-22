@@ -11,6 +11,8 @@ import com.fajtech.sppotracker.infrastructure.config.CurrentSnapshotProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.redis.core.Cursor;
+import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder;
@@ -18,6 +20,7 @@ import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
@@ -36,10 +39,12 @@ class RedisCurrentSnapshotStoreTest {
     private ValueOperations<String, String> valueOps;
     private RedisCurrentSnapshotStore store;
 
+    private StringRedisTemplate redisTemplate;
+
     @BeforeEach
     @SuppressWarnings("unchecked")
     void setUp() {
-        StringRedisTemplate redisTemplate = mock(StringRedisTemplate.class);
+        redisTemplate = mock(StringRedisTemplate.class);
         valueOps = mock(ValueOperations.class);
         when(redisTemplate.opsForValue()).thenReturn(valueOps);
         store = new RedisCurrentSnapshotStore(redisTemplate, objectMapper,
@@ -91,5 +96,32 @@ class RedisCurrentSnapshotStoreTest {
         when(valueOps.get("gps:snapshot:A99999")).thenReturn(null);
 
         assertThat(store.find("A99999")).isEmpty();
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void shouldFindAllViaScanAndMultiGet() throws Exception {
+        ClassifiedVehiclePosition snapshot = snapshot();
+        String json = objectMapper.writeValueAsString(snapshot);
+
+        Cursor<String> cursor = mock(Cursor.class);
+        when(cursor.hasNext()).thenReturn(true, false);
+        when(cursor.next()).thenReturn("gps:snapshot:A12345");
+        when(redisTemplate.scan(org.mockito.ArgumentMatchers.any(ScanOptions.class))).thenReturn(cursor);
+        when(valueOps.multiGet(List.of("gps:snapshot:A12345"))).thenReturn(List.of(json));
+
+        List<ClassifiedVehiclePosition> all = store.findAll();
+
+        assertThat(all).containsExactly(snapshot);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void shouldReturnEmptyListWhenNoKeys() {
+        Cursor<String> cursor = mock(Cursor.class);
+        when(cursor.hasNext()).thenReturn(false);
+        when(redisTemplate.scan(org.mockito.ArgumentMatchers.any(ScanOptions.class))).thenReturn(cursor);
+
+        assertThat(store.findAll()).isEmpty();
     }
 }

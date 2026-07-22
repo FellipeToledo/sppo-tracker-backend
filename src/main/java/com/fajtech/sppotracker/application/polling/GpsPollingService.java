@@ -1,6 +1,7 @@
 package com.fajtech.sppotracker.application.polling;
 
 import com.fajtech.sppotracker.application.ingestion.GpsPositionIngestor;
+import com.fajtech.sppotracker.application.port.in.GetGpsPollingStatusUseCase;
 import com.fajtech.sppotracker.application.port.in.RunGpsPollingCycleUseCase;
 import com.fajtech.sppotracker.application.port.out.FetchExternalGpsPositionsPort;
 import com.fajtech.sppotracker.application.port.out.ProviderReadinessPort;
@@ -11,6 +12,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -26,7 +28,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * <p>Estado thread-safe: um ciclo não roda concorrente consigo mesmo (thread única
  * do scheduler), mas {@code lastResult()} pode ser lido por outras threads (REST).
  */
-public class GpsPollingService implements RunGpsPollingCycleUseCase {
+public class GpsPollingService implements RunGpsPollingCycleUseCase, GetGpsPollingStatusUseCase {
 
     private final FetchExternalGpsPositionsPort fetchPort;
     private final ProviderReadinessPort readinessPort;
@@ -92,6 +94,11 @@ public class GpsPollingService implements RunGpsPollingCycleUseCase {
     /** Último resultado de ciclo (para o endpoint de status, §7.1); null se nunca rodou. */
     public PollingCycleResult lastResult() {
         return lastResult.get();
+    }
+
+    @Override
+    public Optional<PollingCycleResult> lastStatus() {
+        return Optional.ofNullable(lastResult.get());
     }
 
     private boolean inCooldown(Instant now) {

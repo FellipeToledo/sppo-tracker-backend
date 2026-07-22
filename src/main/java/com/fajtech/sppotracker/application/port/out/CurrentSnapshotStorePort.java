@@ -2,6 +2,7 @@ package com.fajtech.sppotracker.application.port.out;
 
 import com.fajtech.sppotracker.domain.vehicle.ClassifiedVehiclePosition;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -17,4 +18,7 @@ public interface CurrentSnapshotStorePort {
 
     /** Salva/renova o snapshot atual do veículo (com TTL). */
     void save(ClassifiedVehiclePosition snapshot);
+
+    /** Todos os snapshots atuais (veículos que ainda estão no "current"). */
+    List<ClassifiedVehiclePosition> findAll();
 }
