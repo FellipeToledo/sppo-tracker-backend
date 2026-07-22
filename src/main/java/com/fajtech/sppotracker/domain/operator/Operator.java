@@ -3,11 +3,12 @@ package com.fajtech.sppotracker.domain.operator;
 import java.util.Objects;
 
 /**
- * Operadora (empresa) de um veículo (docs/regras-de-negocio.md §6). Resolvida pelo
- * prefixo da ordem (4 primeiros caracteres do {@code vehicleId}).
+ * Consórcio operador de um veículo (docs/regras-de-negocio.md §6). Resolvido pelo
+ * primeiro caractere da ordem ({@code vehicleId}), que identifica o consórcio
+ * (A–D; ver §1: formato {@code XYYZZZ}).
  *
- * @param prefix prefixo de 4 caracteres (upper-case) da ordem
- * @param name   nome da empresa operadora
+ * @param prefix primeiro caractere (upper-case) da ordem — A, B, C ou D
+ * @param name   nome do consórcio operador
  */
 public record Operator(String prefix, String name) {
 

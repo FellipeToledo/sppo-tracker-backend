@@ -12,7 +12,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-/** Casos de uso de operadora delegam ao de-para (docs/regras-de-negocio.md §6). */
+/** Casos de uso de consórcio delegam ao de-para (docs/regras-de-negocio.md §6). */
 class OperatorServiceTest {
 
     private OperatorDirectoryPort directory;
@@ -26,7 +26,7 @@ class OperatorServiceTest {
 
     @Test
     void shouldReturnAllOperators() {
-        List<Operator> all = List.of(new Operator("A26I", "Empresa X"), new Operator("B28R", "Empresa Y"));
+        List<Operator> all = List.of(new Operator("A", "Consórcio Intersul"), new Operator("B", "Consórcio Internorte"));
         when(directory.findAll()).thenReturn(all);
 
         assertThat(service.getAll()).isEqualTo(all);
@@ -34,16 +34,16 @@ class OperatorServiceTest {
 
     @Test
     void shouldResolveOperatorByVehicleId() {
-        Operator op = new Operator("A26I", "Empresa X");
-        when(directory.findByVehicleId("A26I001")).thenReturn(Optional.of(op));
+        Operator op = new Operator("A", "Consórcio Intersul");
+        when(directory.findByVehicleId("A26123")).thenReturn(Optional.of(op));
 
-        assertThat(service.resolve("A26I001")).contains(op);
+        assertThat(service.resolve("A26123")).contains(op);
     }
 
     @Test
     void shouldReturnEmptyForUnknownVehicle() {
-        when(directory.findByVehicleId("ZZZZ999")).thenReturn(Optional.empty());
+        when(directory.findByVehicleId("Z99999")).thenReturn(Optional.empty());
 
-        assertThat(service.resolve("ZZZZ999")).isEmpty();
+        assertThat(service.resolve("Z99999")).isEmpty();
     }
 }

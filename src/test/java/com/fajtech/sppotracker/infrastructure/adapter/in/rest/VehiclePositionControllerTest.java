@@ -62,7 +62,7 @@ class VehiclePositionControllerTest {
     @Test
     void shouldReturnCurrentPositionsWithOperatorLabel() throws Exception {
         when(useCase.getCurrent(any())).thenReturn(List.of(snapshot()));
-        when(operators.resolve("A12345")).thenReturn(Optional.of(new Operator("A123", "Empresa X")));
+        when(operators.resolve("A12345")).thenReturn(Optional.of(new Operator("A", "Consórcio Intersul")));
 
         mockMvc.perform(get("/api/v1/vehicle-positions/current"))
                 .andExpect(status().isOk())
@@ -72,7 +72,7 @@ class VehiclePositionControllerTest {
                 .andExpect(jsonPath("$[0].classificationStatus").value("IN_OPERATION"))
                 .andExpect(jsonPath("$[0].valid").value(true))
                 .andExpect(jsonPath("$[0].latitude").value(-22.9))
-                .andExpect(jsonPath("$[0].operatorName").value("Empresa X"));
+                .andExpect(jsonPath("$[0].operatorName").value("Consórcio Intersul"));
     }
 
     @Test

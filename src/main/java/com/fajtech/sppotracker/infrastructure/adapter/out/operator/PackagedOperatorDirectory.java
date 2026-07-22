@@ -18,14 +18,15 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * De-para de operadoras carregado de um JSON empacotado (docs/regras-de-negocio.md
- * §6), uma vez na inicialização — fora do hot path. Resolve pela chave dos 4
- * primeiros caracteres do {@code vehicleId} (upper-case).
+ * De-para de consórcios carregado de um JSON empacotado (docs/regras-de-negocio.md
+ * §6), uma vez na inicialização — fora do hot path. Resolve pelo <b>primeiro
+ * caractere da ordem</b> ({@code vehicleId}, upper-case), que identifica o
+ * consórcio (A–D; ver §1: formato {@code XYYZZZ}).
  */
 @Component
 public class PackagedOperatorDirectory implements OperatorDirectoryPort {
 
-    private static final int PREFIX_LENGTH = 4;
+    private static final int PREFIX_LENGTH = 1;
 
     private final Resource resource;
     private final ObjectMapper objectMapper;

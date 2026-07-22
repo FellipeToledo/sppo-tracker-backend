@@ -230,13 +230,21 @@ Eventos publicados em tempo real (Pub/Sub → WebSocket `/topic/route-deviations
 
 ---
 
-## 6. Operadora do veículo (de-para ordem→empresa)
+## 6. Consórcio do veículo (de-para ordem→consórcio)
 
 - Reference data **estática** (JSON empacotado), carregada uma vez na
   inicialização (fora do hot path).
-- Resolve a **empresa operadora** pelo **prefixo da ordem** (4 primeiros
-  caracteres do `vehicleId`, upper-case).
-- Exposta na API e usada no dashboard para rótulo/filtro por empresa.
+- Resolve o **consórcio operador** pelo **primeiro caractere da ordem**
+  (`vehicleId`, upper-case), que identifica o consórcio — ver §1, formato
+  `XYYZZZ` (X=A–D):
+  - `A` → Consórcio Intersul
+  - `B` → Consórcio Internorte
+  - `C` → Consórcio Transcarioca
+  - `D` → Consórcio Santa Cruz
+- Exposto na API e usado no dashboard para rótulo/filtro por consórcio.
+- ℹ️ O feed público dá a **carroceria** (ordem), não o CNPJ da empresa; a
+  granularidade confiável e pública é o **consórcio** (1º caractere). Um de-para
+  empresa-a-empresa exigiria a relação de frota oficial da SMTR/consórcios.
 
 ---
 

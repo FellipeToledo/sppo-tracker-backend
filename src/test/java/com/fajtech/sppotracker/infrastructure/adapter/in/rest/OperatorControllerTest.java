@@ -27,12 +27,12 @@ class OperatorControllerTest {
     @Test
     void shouldReturnOperators() throws Exception {
         when(useCase.getAll()).thenReturn(List.of(
-                new Operator("A26I", "Empresa X"), new Operator("B28R", "Empresa Y")));
+                new Operator("A", "Consórcio Intersul"), new Operator("B", "Consórcio Internorte")));
 
         mockMvc.perform(get("/api/v1/operators"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].prefix").value("A26I"))
-                .andExpect(jsonPath("$[0].name").value("Empresa X"))
-                .andExpect(jsonPath("$[1].prefix").value("B28R"));
+                .andExpect(jsonPath("$[0].prefix").value("A"))
+                .andExpect(jsonPath("$[0].name").value("Consórcio Intersul"))
+                .andExpect(jsonPath("$[1].prefix").value("B"));
     }
 }

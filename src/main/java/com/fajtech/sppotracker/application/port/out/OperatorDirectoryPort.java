@@ -11,9 +11,9 @@ import java.util.Optional;
  */
 public interface OperatorDirectoryPort {
 
-    /** Resolve a operadora pelo prefixo (4 primeiros chars) do {@code vehicleId}. */
+    /** Resolve o consórcio pelo primeiro caractere da ordem ({@code vehicleId}). */
     Optional<Operator> findByVehicleId(String vehicleId);
 
-    /** Todas as operadoras conhecidas. */
+    /** Todos os consórcios conhecidos. */
     List<Operator> findAll();
 }

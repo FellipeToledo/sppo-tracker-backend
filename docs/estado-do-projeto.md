@@ -103,8 +103,13 @@ polígonos de garagem. Por isso ficaram fora:
    `*IntegrationTest` — a **CI do GitHub Actions** os executa (tem Docker).
    ⚠️ **Não foram executados nesta sessão**: o egress bloqueia o pull de imagens
    Docker aqui; a verificação vem da CI do PR.
-3. **`operators.json` é um dataset *starter*** (4 entradas ilustrativas) — precisa
-   ser substituído pelos dados reais de operadoras da SMTR (de-para prefixo→empresa).
+3. **[ENDEREÇADO] `operators.json` populado com dados reais.** Passou de dataset
+   *starter* (prefixo de 4 chars fictício) para o **de-para real por consórcio**:
+   resolução pelo **1º caractere da ordem** (`A`→Intersul, `B`→Internorte,
+   `C`→Transcarioca, `D`→Santa Cruz — ver `docs/regras-de-negocio.md` §6). Escolha
+   deliberada: o feed público expõe a carroceria (ordem), não o CNPJ da empresa;
+   o consórcio (1º caractere) é a granularidade confiável e pública. Um de-para
+   empresa-a-empresa exigiria a relação de frota oficial da SMTR/consórcios.
 
 ## 6. Convenções seguidas (para manter na próxima sessão)
 
@@ -122,7 +127,8 @@ polígonos de garagem. Por isso ficaram fora:
 
 1. **Fechar débito técnico** (escolher (a) Testcontainers, (b) `contextLoads` leve,
    ou (c) manter como TODO).
-2. **Popular `operators.json`** com dados reais.
+2. ~~**Popular `operators.json`** com dados reais.~~ **Feito** (de-para por
+   consórcio, 1º caractere da ordem — ver §5, débito 3).
 3. **Deploy** na VM Oracle Cloud (docker compose; ver §10 de
    `docs/regras-de-negocio.md` — atenção aos dois firewalls).
 4. **Fonte de shapes** (GTFS/shape-geom) para destravar §5 / OUT_OF_ROUTE / geofence.

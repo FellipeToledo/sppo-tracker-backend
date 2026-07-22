@@ -1,6 +1,6 @@
 [
-  { "prefix": "A26I", "name": "Auxiliar (starter — substituir por dados reais da SMTR)" },
-  { "prefix": "B28R", "name": "Consórcio Internorte (starter)" },
-  { "prefix": "C41O", "name": "Consórcio Intersul (starter)" },
-  { "prefix": "D53T", "name": "Consórcio Transcarioca (starter)" }
+  { "prefix": "A", "name": "Consórcio Intersul" },
+  { "prefix": "B", "name": "Consórcio Internorte" },
+  { "prefix": "C", "name": "Consórcio Transcarioca" },
+  { "prefix": "D", "name": "Consórcio Santa Cruz" }
 ]

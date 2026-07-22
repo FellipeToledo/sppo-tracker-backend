@@ -57,8 +57,8 @@ class RedisVehiclePositionEventPublisherTest {
     @Test
     void shouldPublishResponseJsonWithOperatorToChannel() throws Exception {
         ClassifiedVehiclePosition event = event();
-        when(operators.resolve("A12345")).thenReturn(Optional.of(new Operator("A123", "Empresa X")));
-        String expectedJson = objectMapper.writeValueAsString(VehiclePositionResponse.from(event, "Empresa X"));
+        when(operators.resolve("A12345")).thenReturn(Optional.of(new Operator("A", "Consórcio Intersul")));
+        String expectedJson = objectMapper.writeValueAsString(VehiclePositionResponse.from(event, "Consórcio Intersul"));
 
         publisher.publish(event);
 

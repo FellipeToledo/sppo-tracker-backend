@@ -10,7 +10,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** Carregamento do de-para de operadoras do classpath (docs/regras-de-negocio.md §6). */
+/** Carregamento do de-para de consórcios do classpath (docs/regras-de-negocio.md §6). */
 class PackagedOperatorDirectoryTest {
 
     private PackagedOperatorDirectory directory;
@@ -22,27 +22,28 @@ class PackagedOperatorDirectoryTest {
     }
 
     @Test
-    void shouldResolveByFourCharPrefixCaseInsensitive() {
-        Optional<Operator> op = directory.findByVehicleId("a26i001");
+    void shouldResolveConsortiumByFirstCharCaseInsensitive() {
+        Optional<Operator> op = directory.findByVehicleId("a26123");
         assertThat(op).isPresent();
-        assertThat(op.get().prefix()).isEqualTo("A26I");
+        assertThat(op.get().prefix()).isEqualTo("A");
+        assertThat(op.get().name()).isEqualTo("Consórcio Intersul");
     }
 
     @Test
-    void shouldReturnEmptyForUnknownPrefix() {
-        assertThat(directory.findByVehicleId("ZZZZ999")).isEmpty();
+    void shouldReturnEmptyForUnknownFirstChar() {
+        assertThat(directory.findByVehicleId("Z99999")).isEmpty();
     }
 
     @Test
-    void shouldReturnEmptyForShortOrNullVehicleId() {
-        assertThat(directory.findByVehicleId("A26")).isEmpty();
+    void shouldReturnEmptyForEmptyOrNullVehicleId() {
+        assertThat(directory.findByVehicleId("")).isEmpty();
         assertThat(directory.findByVehicleId(null)).isEmpty();
     }
 
     @Test
-    void shouldExposeAllOperators() {
+    void shouldExposeAllConsortia() {
         assertThat(directory.findAll())
                 .extracting(Operator::prefix)
-                .contains("A26I", "B28R", "C41O", "D53T");
+                .containsExactly("A", "B", "C", "D");
     }
 }
