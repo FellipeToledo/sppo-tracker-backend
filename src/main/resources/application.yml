@@ -1,0 +1,62 @@
+spring:
+  application:
+    name: sppo-tracker-backend
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: ${REDIS_TIMEOUT:5s}
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:sppotracker}
+    username: ${DB_USER:sppotracker}
+    password: ${DB_PASSWORD:sppotracker}
+  jpa:
+    hibernate:
+      ddl-auto: none
+    open-in-view: false
+    properties:
+      hibernate.jdbc.time_zone: UTC
+  flyway:
+    enabled: true
+
+server:
+  port: ${SERVER_PORT:8080}
+  error:
+    include-stacktrace: never
+    include-message: never
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+
+# ---- Domínio (ver docs/regras-de-negocio.md §8) ----
+gps:
+  polling:
+    enabled: ${GPS_POLLING_ENABLED:true}
+    fixed-delay: ${GPS_POLLING_FIXED_DELAY:60s}
+    overlap-window: ${GPS_POLLING_OVERLAP_WINDOW:90s}
+    request-timeout: ${GPS_PROVIDER_REQUEST_TIMEOUT:10s}
+    deduplication-ttl: ${GPS_DEDUPLICATION_TTL:10m}
+    failure-cooldown-threshold: ${GPS_POLLING_FAILURE_COOLDOWN_THRESHOLD:3}
+    failure-cooldown: ${GPS_POLLING_FAILURE_COOLDOWN:5m}
+  cache:
+    current-snapshot-ttl: ${GPS_CURRENT_SNAPSHOT_TTL:15m}
+  classification:
+    stale-position-threshold: ${GPS_STALE_POSITION_THRESHOLD:5m}
+    out-of-route-distance-threshold-meters: ${GPS_OUT_OF_ROUTE_DISTANCE_THRESHOLD_METERS:100}
+  geofence:
+    rio-municipality:
+      min-latitude: ${RIO_MUNICIPALITY_MIN_LATITUDE:-23.10}
+      max-latitude: ${RIO_MUNICIPALITY_MAX_LATITUDE:-22.70}
+      min-longitude: ${RIO_MUNICIPALITY_MIN_LONGITUDE:-43.80}
+      max-longitude: ${RIO_MUNICIPALITY_MAX_LONGITUDE:-43.05}
+  provider:
+    dados-rio:
+      base-url: ${DADOS_RIO_BASE_URL:https://dados.mobilidade.rio}
+      path: ${DADOS_RIO_PATH:/gps/sppo}
+      request-time-zone: ${DADOS_RIO_REQUEST_TIME_ZONE:America/Sao_Paulo}
+      max-in-memory-size: ${DADOS_RIO_MAX_IN_MEMORY_SIZE:33554432}
+      retry-max-attempts: ${DADOS_RIO_RETRY_MAX_ATTEMPTS:2}
+      retry-backoff: ${DADOS_RIO_RETRY_BACKOFF:1s}

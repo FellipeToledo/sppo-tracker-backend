@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mvn test)",
+      "Bash(mvn --batch-mode test)",
+      "Bash(mvn -Dtest=*)",
+      "Bash(mvn compile)",
+      "Bash(mvn spring-boot:run)",
+      "Bash(git status)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git add:*)",
+      "Bash(ls:*)",
+      "Bash(docker compose config)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      { "hooks": [ { "type": "command", "command": ".claude/hooks/session-start.sh" } ] }
+    ]
+  }
+}
