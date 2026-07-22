@@ -86,23 +86,23 @@ polígonos de garagem. Por isso ficaram fora:
 **Para destravar §5/OUT_OF_ROUTE/geofence:** decidir a fonte de itinerário
 (GTFS/`shape-geom` próprio) — ver §10 e TODO de `docs/regras-de-negocio.md`.
 
-## 5. DÉBITO TÉCNICO em aberto
+## 5. DÉBITO TÉCNICO
 
-1. **Sem teste de contexto Spring completo.** O wiring de todos os beans foi
-   validado *por construção* (compilação + testes unitários), mas **não há um
-   `@SpringBootTest contextLoads`** que suba o contexto inteiro. Alguns riscos de
-   wiring só apareceriam em runtime (ex.: já verificamos manualmente que
-   `@Scheduled(fixedDelayString="60s")` é aceito, e removemos beans duplicados de
-   `WebClient.Builder`).
-2. **Fidelidade Redis/Postgres via mock.** Dedup (SET NX EX), snapshot (SCAN +
-   multiGet, serialização JSON), Pub/Sub e o repositório JPA + migração Flyway
-   **não são exercitados contra infra real**. A semântica real não tem cobertura.
+1. **[ENDEREÇADO] Teste de contexto Spring.** Adicionado
+   `SppoTrackerBackendApplicationTests` (`@SpringBootTest contextLoads`,
+   hermético — infra Redis/Postgres desligada por `spring.autoconfigure.exclude`
+   e beans Redis mockados). Roda no `mvn test`. *Pegou um bug real:* o
+   `WebClient.Builder` não é autoconfigurado no Boot 4 (servlet) — agora fornecido
+   explicitamente em `ProviderConfig`.
+2. **[ENDEREÇADO na CI] Fidelidade Redis/Postgres.** ITs Testcontainers
+   (`*IT`, `@Tag("integration")`): `RedisDeduplicationStoreIT` (SET NX EX + TTL),
+   `RedisCurrentSnapshotStoreIT` (JSON + SCAN), `RouteDeviationEventRepositoryIT`
+   (Flyway V1 + JPA em Postgres real). Excluídos do `mvn test` (surefire) e rodados
+   por `mvn verify` (failsafe) — a **CI do GitHub Actions** os executa (tem Docker).
+   ⚠️ **Não foram executados nesta sessão**: o egress bloqueia o pull de imagens
+   Docker aqui; a verificação vem da CI do PR.
 3. **`operators.json` é um dataset *starter*** (4 entradas ilustrativas) — precisa
    ser substituído pelos dados reais de operadoras da SMTR (de-para prefixo→empresa).
-4. **Decisão pendente: Testcontainers.** Fechar 1 e 2 de forma fiel pede
-   **Testcontainers (Redis + Postgres)** atrás de `@Tag("integration")`/profile, o
-   que exige **Docker disponível** na sessão/CI. Alternativa leve: um `contextLoads`
-   com infra desligada/mockada (valida wiring, não a semântica).
 
 ## 6. Convenções seguidas (para manter na próxima sessão)
 
