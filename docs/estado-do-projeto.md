@@ -1,0 +1,120 @@
+# Estado do projeto — sppo-tracker-backend
+
+Documento de **handoff** entre sessões. Resume o que está pronto, o que foi
+deliberadamente adiado e o débito técnico em aberto. Atualize-o ao fim de cada
+bloco de trabalho.
+
+> Fonte da verdade do domínio: **`docs/regras-de-negocio.md`**. Convenções e
+> comandos: **`CLAUDE.md`**. Este arquivo é só o "onde paramos".
+
+---
+
+## 1. Visão geral do que existe
+
+Backend Java 21 / Spring Boot 3.5, arquitetura hexagonal, que faz polling da API
+pública de GPS do SPPO (SMTR), classifica as posições e as distribui via REST,
+WebSocket e métricas Prometheus. **Hot path completo e testado:**
+
+```
+scheduler → readiness → cooldown → janela [now-90s, now] → fetch (provider)
+  → dedup (Redis) → detecção de mudança → classificação → snapshot (Redis)
+  → publica evento (Redis Pub/Sub → STOMP) → métricas
+```
+
+- **Testes:** `mvn --batch-mode test` → **130 testes, 0 falhas** (todos herméticos:
+  sem Redis/Postgres/rede reais — usam mocks, `SimpleMeterRegistry`, MockWebServer,
+  `@WebMvcTest`).
+- **Branch de trabalho:** `claude/sppo-tracker-setup-cd7vmo`. **Nenhum PR aberto**
+  ainda (abrir só quando desejado).
+
+## 2. Roadmap — fatias concluídas (1–10)
+
+| # | Fatia | Entregue |
+|---|-------|----------|
+| 1 | Domínio | `VehiclePosition` (+invariantes, Builder), `PositionSource` |
+| 2 | Provider | `FetchExternalGpsPositionsPort` + adapter WebClient (SMTR); `DecimalParser`/`EpochParser`; mapper defensivo |
+| 3 | Ingestão/scheduler | `GpsPollingService` (readiness, cooldown, janela de sobreposição), `GpsPollingScheduler`, `PublicApiProviderReadiness` |
+| 4 | Dedup + mudança | `DeduplicationPort`/`RedisDeduplicationStore` (SET NX EX), `PositionChangeDetector` |
+| 5 | Snapshot + pipeline | `CurrentSnapshotStorePort`/`RedisCurrentSnapshotStore`, `GpsPositionIngestor` |
+| 6 | Classificação | `PositionClassifier` (precedência §4.2), regras, `PositionClassification` (flags §4.5), `ClassifiedVehiclePosition` |
+| 7 | REST v1 | `GET /api/v1/vehicle-positions/current` (filtros), `GET /api/v1/gps-polling/status`, `application/problem+json` |
+| 8 | WebSocket/STOMP | `/ws`, tópicos `/topic/vehicle-positions[/service|/route]`, relay Redis Pub/Sub→STOMP |
+| 9 | Métricas | Micrometer em polling, provider e classificação (`/actuator/prometheus`) |
+| 10 | Operadoras + persistência | `/api/v1/operators`, rótulo por veículo; esqueleto Flyway/Postgres (tabela + entidade + repo de eventos de desvio) |
+
+## 3. Endpoints disponíveis
+
+- `GET /api/v1/vehicle-positions/current?serviceCode=&routeId=&classificationStatus=`
+- `GET /api/v1/gps-polling/status` (204 se nenhum ciclo rodou)
+- `GET /api/v1/operators`
+- WebSocket STOMP: `/ws` → assinar `/topic/vehicle-positions`
+  (e `/service/{serviceCode}`, `/route/{routeId}`)
+- `GET /actuator/health`, `GET /actuator/prometheus`
+
+Métricas: `gps.polling.cycles{outcome}`, `gps.polling.cycle.duration`,
+`gps.polling.consecutive.failures`, `gps.ingestion.positions{result}`,
+`gps.classifications{status}`, `gps.position.age`,
+`gps.provider.requests{outcome}`, `gps.provider.request.duration`,
+`gps.provider.window.seconds`.
+
+---
+
+## 4. Trabalho ADIADO (bloqueado por dados que o feed público não tem)
+
+O feed público da SMTR **não fornece** `routeId`/`shapeId`/sentido, nem shapes ou
+polígonos de garagem. Por isso ficaram fora:
+
+- **§5 — Máquina de estados de desvio de rota (C1 ALERT / C2 CONFIRMED / RETURN /
+  CANCELLED), severidade, sweep.** Depende de aderência dentro/fora do corredor
+  (geometria de shapes). **A persistência já está pronta** para receber os eventos
+  (`route_deviation_event`, entidade e repositório existem; falta o *escritor*).
+- **Regra `OUT_OF_ROUTE`** — sem produtor (§4.4 diz que fica desligada com o feed
+  público). A tag e o lugar na precedência/flags já existem no modelo.
+- **Regra `GARAGE_GEOFENCE`** — precisa de polígonos GeoJSON de garagem
+  (empacotados). A tag já existe; `IN_GARAGE` hoje só é atingido por código de
+  serviço.
+- **Endpoints §7.1 não implementados:** `/api/v1/garages`,
+  `/api/v1/shapes/{id}`, `/api/v1/shapes/{id}/corridor` (dependem de geometria).
+
+**Para destravar §5/OUT_OF_ROUTE/geofence:** decidir a fonte de itinerário
+(GTFS/`shape-geom` próprio) — ver §10 e TODO de `docs/regras-de-negocio.md`.
+
+## 5. DÉBITO TÉCNICO em aberto
+
+1. **Sem teste de contexto Spring completo.** O wiring de todos os beans foi
+   validado *por construção* (compilação + testes unitários), mas **não há um
+   `@SpringBootTest contextLoads`** que suba o contexto inteiro. Alguns riscos de
+   wiring só apareceriam em runtime (ex.: já verificamos manualmente que
+   `@Scheduled(fixedDelayString="60s")` é aceito, e removemos beans duplicados de
+   `WebClient.Builder`).
+2. **Fidelidade Redis/Postgres via mock.** Dedup (SET NX EX), snapshot (SCAN +
+   multiGet, serialização JSON), Pub/Sub e o repositório JPA + migração Flyway
+   **não são exercitados contra infra real**. A semântica real não tem cobertura.
+3. **`operators.json` é um dataset *starter*** (4 entradas ilustrativas) — precisa
+   ser substituído pelos dados reais de operadoras da SMTR (de-para prefixo→empresa).
+4. **Decisão pendente: Testcontainers.** Fechar 1 e 2 de forma fiel pede
+   **Testcontainers (Redis + Postgres)** atrás de `@Tag("integration")`/profile, o
+   que exige **Docker disponível** na sessão/CI. Alternativa leve: um `contextLoads`
+   com infra desligada/mockada (valida wiring, não a semântica).
+
+## 6. Convenções seguidas (para manter na próxima sessão)
+
+- **TDD:** teste que falha primeiro → implementar → `mvn test`.
+- **Hexagonal estrito:** `domain/` puro; `application/` depende só de portas e é
+  **livre de framework** (serviços instanciados como `@Bean` pela infra, não
+  `@Service`); `infrastructure/` implementa as portas.
+- **Commits:** Conventional Commits, mensagens em inglês, pequenos por fatia.
+- **Fluxo:** plan mode → implementar → `mvn test` verde → `/security-review` quando
+  toca I/O → commit → push.
+- **Tempo** em UTC interno (`Clock` injetável); conversão só na borda (filtro da API
+  em BRT).
+
+## 7. Próximos passos sugeridos (ordem de valor/viabilidade)
+
+1. **Fechar débito técnico** (escolher (a) Testcontainers, (b) `contextLoads` leve,
+   ou (c) manter como TODO).
+2. **Popular `operators.json`** com dados reais.
+3. **Deploy** na VM Oracle Cloud (docker compose; ver §10 de
+   `docs/regras-de-negocio.md` — atenção aos dois firewalls).
+4. **Fonte de shapes** (GTFS/shape-geom) para destravar §5 / OUT_OF_ROUTE / geofence.
+5. **CI** (GitHub Actions: build/test → imagem → deploy).
