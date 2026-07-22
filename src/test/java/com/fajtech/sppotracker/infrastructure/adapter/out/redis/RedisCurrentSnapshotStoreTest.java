@@ -8,14 +8,14 @@ import com.fajtech.sppotracker.domain.vehicle.PositionSource;
 import com.fajtech.sppotracker.domain.vehicle.VehiclePosition;
 import com.fajtech.sppotracker.domain.vehicle.VehiclePositionStatus;
 import com.fajtech.sppotracker.infrastructure.config.CurrentSnapshotProperties;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.redis.core.Cursor;
 import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
-import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder;
 
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -35,7 +35,7 @@ class RedisCurrentSnapshotStoreTest {
 
     private static final Duration TTL = Duration.ofMinutes(15);
 
-    private final ObjectMapper objectMapper = Jackson2ObjectMapperBuilder.json().build();
+    private final ObjectMapper objectMapper = JsonMapper.builder().build();
     private ValueOperations<String, String> valueOps;
     private RedisCurrentSnapshotStore store;
 

@@ -5,10 +5,10 @@ import com.fajtech.sppotracker.application.port.out.PublishVehiclePositionEventP
 import com.fajtech.sppotracker.domain.operator.Operator;
 import com.fajtech.sppotracker.domain.vehicle.ClassifiedVehiclePosition;
 import com.fajtech.sppotracker.infrastructure.adapter.in.rest.dto.VehiclePositionResponse;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * Publica o evento de posição no canal Redis Pub/Sub (docs/regras-de-negocio.md
@@ -40,7 +40,7 @@ public class RedisVehiclePositionEventPublisher implements PublishVehiclePositio
         String json;
         try {
             json = objectMapper.writeValueAsString(VehiclePositionResponse.from(event, operatorName));
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new IllegalStateException("Falha ao serializar evento de posição do veículo "
                     + event.position().vehicleId(), e);
         }

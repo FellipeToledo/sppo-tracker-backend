@@ -5,7 +5,7 @@ este arquivo atualizado no mesmo PR sempre que uma convenção mudar.
 
 ## Visão geral
 
-Backend Java 21 / Spring Boot 3.5 que faz polling da **API pública de GPS do SPPO**
+Backend Java 21 / Spring Boot 4.1 que faz polling da **API pública de GPS do SPPO**
 (SMTR — `dados.mobilidade.rio/gps/sppo`), normaliza/deduplica/classifica posições
 GPS de ônibus e as distribui em tempo real via REST, WebSocket/STOMP e métricas
 Prometheus. **Monólito modular com arquitetura hexagonal.**

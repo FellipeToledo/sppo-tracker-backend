@@ -2,11 +2,12 @@ package com.fajtech.sppotracker.infrastructure.adapter.out.operator;
 
 import com.fajtech.sppotracker.application.port.out.OperatorDirectoryPort;
 import com.fajtech.sppotracker.domain.operator.Operator;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Component;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -44,7 +45,7 @@ public class PackagedOperatorDirectory implements OperatorDirectoryPort {
             for (Operator operator : operators) {
                 byPrefix.put(operator.prefix().toUpperCase(Locale.ROOT), operator);
             }
-        } catch (IOException e) {
+        } catch (IOException | JacksonException e) {
             throw new IllegalStateException("Falha ao carregar o de-para de operadoras", e);
         }
     }
@@ -65,6 +66,6 @@ public class PackagedOperatorDirectory implements OperatorDirectoryPort {
 
     /** Tipo auxiliar para desserializar a lista de operadoras. */
     private static final class OperatorListType
-            extends com.fasterxml.jackson.core.type.TypeReference<List<Operator>> {
+            extends tools.jackson.core.type.TypeReference<List<Operator>> {
     }
 }
