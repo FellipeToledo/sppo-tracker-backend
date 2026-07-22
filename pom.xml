@@ -114,12 +114,26 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
             </plugin>
-            <!-- Failsafe roda os testes de integração (*IT) via `mvn verify`.
-                 Surefire (`mvn test`) roda apenas *Test, deixando os ITs
-                 (Testcontainers, precisam de Docker) fora do build local. -->
+            <!-- Convenção: todos os testes terminam em *Test (ver CLAUDE.md). Os de
+                 integração usam o sufixo *IntegrationTest e a tag @Tag("integration").
+                 Surefire (`mvn test`) exclui a tag "integration" → só unitários.
+                 Failsafe (`mvn verify`) roda os *IntegrationTest (Testcontainers,
+                 precisam de Docker) — daí ficam fora do build local. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <excludedGroups>integration</excludedGroups>
+                </configuration>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-failsafe-plugin</artifactId>
+                <configuration>
+                    <includes>
+                        <include>**/*IntegrationTest.java</include>
+                    </includes>
+                </configuration>
                 <executions>
                     <execution>
                         <goals>
