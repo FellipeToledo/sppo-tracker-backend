@@ -1,5 +1,6 @@
 package com.fajtech.sppotracker.application.polling;
 
+import com.fajtech.sppotracker.application.ingestion.GpsPositionIngestor;
 import com.fajtech.sppotracker.application.port.out.FetchExternalGpsPositionsPort;
 import com.fajtech.sppotracker.application.port.out.ProviderReadinessPort;
 import com.fajtech.sppotracker.domain.vehicle.Coordinates;
@@ -38,6 +39,7 @@ class GpsPollingServiceTest {
     private SettableClock clock;
     private FetchExternalGpsPositionsPort fetchPort;
     private ProviderReadinessPort readinessPort;
+    private GpsPositionIngestor ingestor;
     private GpsPollingService service;
 
     @BeforeEach
@@ -45,8 +47,9 @@ class GpsPollingServiceTest {
         clock = new SettableClock(T0);
         fetchPort = mock(FetchExternalGpsPositionsPort.class);
         readinessPort = mock(ProviderReadinessPort.class);
+        ingestor = mock(GpsPositionIngestor.class);
         when(readinessPort.isReady()).thenReturn(true);
-        service = new GpsPollingService(fetchPort, readinessPort, clock, OVERLAP, THRESHOLD, COOLDOWN);
+        service = new GpsPollingService(fetchPort, readinessPort, ingestor, clock, OVERLAP, THRESHOLD, COOLDOWN);
     }
 
     private static VehiclePosition position(String vehicleId) {
@@ -61,8 +64,9 @@ class GpsPollingServiceTest {
     }
 
     @Test
-    void shouldFetchOverlapWindowAndReturnSuccess() {
-        when(fetchPort.fetch(any(), any())).thenReturn(List.of(position("A1"), position("A2")));
+    void shouldFetchOverlapWindowIngestAndReturnSuccess() {
+        List<VehiclePosition> positions = List.of(position("A1"), position("A2"));
+        when(fetchPort.fetch(any(), any())).thenReturn(positions);
 
         PollingCycleResult result = service.runCycle();
 
@@ -73,6 +77,19 @@ class GpsPollingServiceTest {
         assertThat(result.windowEnd()).isEqualTo(T0);
         assertThat(result.startedAt()).isEqualTo(T0);
         verify(fetchPort).fetch(T0.minus(OVERLAP), T0);
+        verify(ingestor).ingest(positions);
+    }
+
+    @Test
+    void shouldFailAndEnterCooldownWhenIngestionThrows() {
+        when(fetchPort.fetch(any(), any())).thenReturn(List.of(position("A1")));
+        doThrow(new RuntimeException("redis down")).when(ingestor).ingest(any());
+
+        PollingCycleResult result = service.runCycle();
+
+        assertThat(result.outcome()).isEqualTo(PollingOutcome.FAILURE);
+        assertThat(result.errorMessage()).isEqualTo("redis down");
+        assertThat(result.consecutiveFailures()).isEqualTo(1);
     }
 
     @Test

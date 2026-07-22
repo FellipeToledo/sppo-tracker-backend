@@ -1,5 +1,6 @@
 package com.fajtech.sppotracker.application.polling;
 
+import com.fajtech.sppotracker.application.ingestion.GpsPositionIngestor;
 import com.fajtech.sppotracker.application.port.in.RunGpsPollingCycleUseCase;
 import com.fajtech.sppotracker.application.port.out.FetchExternalGpsPositionsPort;
 import com.fajtech.sppotracker.application.port.out.ProviderReadinessPort;
@@ -29,6 +30,7 @@ public class GpsPollingService implements RunGpsPollingCycleUseCase {
 
     private final FetchExternalGpsPositionsPort fetchPort;
     private final ProviderReadinessPort readinessPort;
+    private final GpsPositionIngestor ingestor;
     private final Clock clock;
     private final Duration overlapWindow;
     private final int failureCooldownThreshold;
@@ -40,12 +42,14 @@ public class GpsPollingService implements RunGpsPollingCycleUseCase {
 
     public GpsPollingService(FetchExternalGpsPositionsPort fetchPort,
                              ProviderReadinessPort readinessPort,
+                             GpsPositionIngestor ingestor,
                              Clock clock,
                              Duration overlapWindow,
                              int failureCooldownThreshold,
                              Duration failureCooldown) {
         this.fetchPort = Objects.requireNonNull(fetchPort, "fetchPort");
         this.readinessPort = Objects.requireNonNull(readinessPort, "readinessPort");
+        this.ingestor = Objects.requireNonNull(ingestor, "ingestor");
         this.clock = Objects.requireNonNull(clock, "clock");
         this.overlapWindow = Objects.requireNonNull(overlapWindow, "overlapWindow");
         this.failureCooldownThreshold = failureCooldownThreshold;
@@ -72,8 +76,9 @@ public class GpsPollingService implements RunGpsPollingCycleUseCase {
         Instant windowStart = startedAt.minus(overlapWindow);
         try {
             List<VehiclePosition> positions = fetchPort.fetch(windowStart, windowEnd);
-            // Costura para a fatia 4: aqui as posições seguirão para o ingestor
-            // (dedup → detecção de mudança → classificação → snapshot → publicação).
+            // Hot path por posição: dedup → detecção de mudança → snapshot atual.
+            // (classificação e publicação entram em fatias posteriores.)
+            ingestor.ingest(positions);
             onSuccess();
             return record(PollingCycleResult.success(
                     windowStart, windowEnd, positions.size(), startedAt, elapsedSince(startedAt)));
