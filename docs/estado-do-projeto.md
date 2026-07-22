@@ -11,7 +11,7 @@ bloco de trabalho.
 
 ## 1. Visão geral do que existe
 
-Backend Java 21 / Spring Boot 3.5, arquitetura hexagonal, que faz polling da API
+Backend Java 21 / Spring Boot 4.1 (Jackson 3), arquitetura hexagonal, que faz polling da API
 pública de GPS do SPPO (SMTR), classifica as posições e as distribui via REST,
 WebSocket e métricas Prometheus. **Hot path completo e testado:**
 
@@ -21,6 +21,13 @@ scheduler → readiness → cooldown → janela [now-90s, now] → fetch (provid
   → publica evento (Redis Pub/Sub → STOMP) → métricas
 ```
 
+- **Migração Spring Boot 4.1 / Jackson 3 concluída** (após os merges do Dependabot):
+  imports `com.fasterxml.jackson.databind` → `tools.jackson.databind`, exceções
+  Jackson agora *unchecked* (`JacksonException`), `TypeReference` do Jackson 3,
+  mappers de teste via `JsonMapper.builder()`, e a dependência de teste
+  `spring-boot-starter-webmvc-test` (o `@WebMvcTest` mudou para
+  `org.springframework.boot.webmvc.test.autoconfigure`). Annotations Jackson
+  permanecem em `com.fasterxml.jackson.annotation`.
 - **Testes:** `mvn --batch-mode test` → **130 testes, 0 falhas** (todos herméticos:
   sem Redis/Postgres/rede reais — usam mocks, `SimpleMeterRegistry`, MockWebServer,
   `@WebMvcTest`).

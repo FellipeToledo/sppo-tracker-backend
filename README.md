@@ -16,7 +16,7 @@ Monólito modular com **arquitetura hexagonal**. Sem credencial de provider.
 
 ## Stack
 
-Java 21 · Spring Boot 3.5 · Spring Web / WebFlux · Data Redis · WebSocket/STOMP ·
+Java 21 · Spring Boot 4.1 · Spring Web / WebFlux · Data Redis · WebSocket/STOMP ·
 Data JPA + Flyway (Postgres) · Actuator · Micrometer/Prometheus · JUnit 5.
 
 ## Rodando

@@ -1,7 +1,7 @@
 package com.fajtech.sppotracker.infrastructure.adapter.out.operator;
 
 import com.fajtech.sppotracker.domain.operator.Operator;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.io.ClassPathResource;
@@ -17,7 +17,7 @@ class PackagedOperatorDirectoryTest {
 
     @BeforeEach
     void setUp() throws Exception {
-        directory = new PackagedOperatorDirectory(new ClassPathResource("operators.json"), new ObjectMapper());
+        directory = new PackagedOperatorDirectory(new ClassPathResource("operators.json"), JsonMapper.builder().build());
         directory.load();
     }
 

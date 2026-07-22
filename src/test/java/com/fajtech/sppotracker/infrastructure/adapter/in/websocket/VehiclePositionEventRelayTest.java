@@ -1,11 +1,11 @@
 package com.fajtech.sppotracker.infrastructure.adapter.in.websocket;
 
 import com.fajtech.sppotracker.infrastructure.adapter.in.rest.dto.VehiclePositionResponse;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.redis.connection.Message;
-import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 
 import java.math.BigDecimal;
@@ -21,7 +21,7 @@ import static org.mockito.Mockito.when;
 /** Relay Redis Pub/Sub → tópicos STOMP (§7.2). */
 class VehiclePositionEventRelayTest {
 
-    private final ObjectMapper objectMapper = Jackson2ObjectMapperBuilder.json().build();
+    private final ObjectMapper objectMapper = JsonMapper.builder().build();
     private SimpMessagingTemplate messagingTemplate;
     private VehiclePositionEventRelay relay;
 

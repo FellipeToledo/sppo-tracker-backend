@@ -3,12 +3,12 @@ package com.fajtech.sppotracker.infrastructure.adapter.out.redis;
 import com.fajtech.sppotracker.application.port.out.CurrentSnapshotStorePort;
 import com.fajtech.sppotracker.domain.vehicle.ClassifiedVehiclePosition;
 import com.fajtech.sppotracker.infrastructure.config.CurrentSnapshotProperties;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.data.redis.core.Cursor;
 import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -45,7 +45,7 @@ public class RedisCurrentSnapshotStore implements CurrentSnapshotStorePort {
         }
         try {
             return Optional.of(objectMapper.readValue(json, ClassifiedVehiclePosition.class));
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new IllegalStateException("Falha ao desserializar snapshot do veículo " + vehicleId, e);
         }
     }
@@ -56,7 +56,7 @@ public class RedisCurrentSnapshotStore implements CurrentSnapshotStorePort {
         String json;
         try {
             json = objectMapper.writeValueAsString(snapshot);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new IllegalStateException("Falha ao serializar snapshot do veículo " + vehicleId, e);
         }
         redisTemplate.opsForValue().set(key(vehicleId), json, properties.currentSnapshotTtl());
@@ -95,7 +95,7 @@ public class RedisCurrentSnapshotStore implements CurrentSnapshotStorePort {
     private ClassifiedVehiclePosition deserialize(String json) {
         try {
             return objectMapper.readValue(json, ClassifiedVehiclePosition.class);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new IllegalStateException("Falha ao desserializar snapshot", e);
         }
     }
