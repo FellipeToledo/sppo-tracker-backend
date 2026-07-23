@@ -48,8 +48,14 @@ src/main/java/com/fajtech/sppotracker
 ## Deploy
 
 Serviço *always-on* (worker + WebSocket). Alvo recomendado: **VM ARM Ampere da
-Oracle Cloud (Always Free)** com `docker compose`. Ver TODO em
-`docs/regras-de-negocio.md` §10.
+Oracle Cloud (Always Free)** com `docker compose` — stack autossuficiente e sem
+segredo. Guia passo a passo (incl. os dois firewalls e HTTPS opcional):
+**[`docs/deploy-oracle-cloud.md`](docs/deploy-oracle-cloud.md)**.
+
+```bash
+cp .env.example .env   # troque DB_PASSWORD
+docker compose -f docker-compose.yml -f docker-compose.oracle.yml up -d --build
+```
 
 ## Convenção de commits
 

@@ -132,7 +132,9 @@ polígonos de garagem. Por isso ficaram fora:
    ou (c) manter como TODO).
 2. ~~**Popular `operators.json`** com dados reais.~~ **Feito** (de-para por
    consórcio, 1º caractere da ordem — ver §5, débito 3).
-3. **Deploy** na VM Oracle Cloud (docker compose; ver §10 de
-   `docs/regras-de-negocio.md` — atenção aos dois firewalls).
+3. ~~**Deploy** na VM Oracle Cloud (docker compose).~~ **Artefatos prontos:**
+   `Dockerfile`, `docker-compose.yml`, `docker-compose.oracle.yml`, `.env.example`
+   e o guia **`docs/deploy-oracle-cloud.md`** (inclui os dois firewalls e HTTPS
+   opcional via Caddy). Falta só provisionar a VM e rodar.
 4. **Fonte de shapes** (GTFS/shape-geom) para destravar §5 / OUT_OF_ROUTE / geofence.
 5. **CI** (GitHub Actions: build/test → imagem → deploy).

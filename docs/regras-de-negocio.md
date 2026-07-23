@@ -343,8 +343,11 @@ das posições (ingestão, envio, servidor), resolução de shapes. Endpoints
 
 ## 10. TODO — infraestrutura e evoluções
 
-- [ ] **Deploy gratuito na VM ARM Ampere da Oracle Cloud (Always Free)** — plano
-      que estava pronto para aplicar:
+- [x] **Deploy gratuito na VM ARM Ampere da Oracle Cloud (Always Free)** —
+      artefatos prontos no repo: `Dockerfile`, `docker-compose.yml`,
+      `docker-compose.oracle.yml` (overlay de produção), `.env.example` e o guia
+      passo a passo **`docs/deploy-oracle-cloud.md`**. Falta apenas provisionar a
+      VM e rodar. Resumo do que o guia cobre:
   - VM Ubuntu 22.04, shape `VM.Standard.A1.Flex` (2 OCPU / 12 GB, grátis).
   - Stack via Docker Compose **autossuficiente**: backend + Redis + Postgres
     (build a partir do Dockerfile; **sem segredo**, pois a API de GPS é pública).
