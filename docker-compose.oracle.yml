@@ -1,0 +1,53 @@
+# Overlay de PRODUÇÃO para a VM ARM Ampere da Oracle Cloud (Always Free, A1.Flex
+# 2 OCPU / 12 GB). Uso — sobreposto ao compose base:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.oracle.yml up -d --build
+#
+# Mantém a stack autossuficiente (backend + Redis + Postgres) e adiciona limites de
+# memória sensatos para o shape gratuito, além de HTTPS opcional via Caddy (perfil
+# `tls`). Nenhum segredo é necessário — a API de GPS é pública.
+services:
+  redis:
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+  postgres:
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+
+  sppo-tracker-backend:
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+
+  # HTTPS opcional. Habilite com o perfil `tls` e defina DOMAIN (e opcionalmente
+  # LETSENCRYPT_EMAIL) no .env; o Caddy obtém o certificado automaticamente.
+  #   docker compose -f docker-compose.yml -f docker-compose.oracle.yml \
+  #     --profile tls up -d
+  # Requer as portas 80 e 443 liberadas nos DOIS firewalls (ver docs/deploy-oracle-cloud.md).
+  caddy:
+    image: caddy:2-alpine
+    profiles: ["tls"]
+    depends_on:
+      sppo-tracker-backend:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+    # DOMAIN precisa estar definido no .env ao usar o perfil `tls` (senão o Caddy
+    # sobe sem domínio e falha — ver docs/deploy-oracle-cloud.md §6). Default vazio
+    # aqui só para não quebrar a interpolação quando o perfil NÃO está ativo.
+    command: caddy reverse-proxy --from ${DOMAIN:-} --to sppo-tracker-backend:8080
+    volumes:
+      - caddy-data:/data
+      - caddy-config:/config
+    restart: unless-stopped
+
+volumes:
+  caddy-data:
+  caddy-config:
