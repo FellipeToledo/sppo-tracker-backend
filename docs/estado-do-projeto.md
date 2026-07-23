@@ -28,7 +28,7 @@ scheduler → readiness → cooldown → janela [now-90s, now] → fetch (provid
   `spring-boot-starter-webmvc-test` (o `@WebMvcTest` mudou para
   `org.springframework.boot.webmvc.test.autoconfigure`). Annotations Jackson
   permanecem em `com.fasterxml.jackson.annotation`.
-- **Testes:** `mvn --batch-mode test` → **130 testes, 0 falhas** (todos herméticos:
+- **Testes:** `mvn --batch-mode test` → **168 testes, 0 falhas** (todos herméticos:
   sem Redis/Postgres/rede reais — usam mocks, `SimpleMeterRegistry`, MockWebServer,
   `@WebMvcTest`).
 - **Branch de trabalho:** `claude/sppo-tracker-setup-cd7vmo`. **Nenhum PR aberto**
@@ -75,8 +75,11 @@ polígonos de garagem. Por isso ficaram fora:
   CANCELLED), severidade, sweep.** Depende de aderência dentro/fora do corredor
   (geometria de shapes). **A persistência já está pronta** para receber os eventos
   (`route_deviation_event`, entidade e repositório existem; falta o *escritor*).
-- **Regra `OUT_OF_ROUTE`** — sem produtor (§4.4 diz que fica desligada com o feed
-  público). A tag e o lugar na precedência/flags já existem no modelo.
+  A geometria já está disponível (fatia A — ver §8 abaixo); é o próximo passo.
+- ~~**Regra `OUT_OF_ROUTE`** — sem produtor.~~ **FEITO (fatia A):** produtor
+  ligado via `sppo-gtfs-service` (repo separado, BigQuery/GTFS da SMTR). Fica
+  **desligado por default** (`ROUTE_SHAPE_SOURCE=disabled`); com `gtfs-service`,
+  a `OutOfRouteRule` entra no classificador. Detalhes na §8.
 - **Regra `GARAGE_GEOFENCE`** — precisa de polígonos GeoJSON de garagem
   (empacotados). A tag já existe; `IN_GARAGE` hoje só é atingido por código de
   serviço.
@@ -136,5 +139,45 @@ polígonos de garagem. Por isso ficaram fora:
    `Dockerfile`, `docker-compose.yml`, `docker-compose.oracle.yml`, `.env.example`
    e o guia **`docs/deploy-oracle-cloud.md`** (inclui os dois firewalls e HTTPS
    opcional via Caddy). Falta só provisionar a VM e rodar.
-4. **Fonte de shapes** (GTFS/shape-geom) para destravar §5 / OUT_OF_ROUTE / geofence.
+4. ~~**Fonte de shapes** para destravar OUT_OF_ROUTE.~~ **Feito (fatia A)** — ver §8.
+   Falta destravar **§5 (máquina de desvio)** reusando a mesma geometria, e a
+   **geofence de garagem**.
 5. **CI** (GitHub Actions: build/test → imagem → deploy).
+
+---
+
+## 8. Fatia A — aderência de rota via `sppo-gtfs-service` (OUT_OF_ROUTE)
+
+Integração com o **`sppo-gtfs-service`** (microserviço separado, Java/Spring
+hexagonal, que serve shapes do GTFS da SMTR a partir do BigQuery). O backend passou
+a **produzir** a tag `OUT_OF_ROUTE`, testando cada posição contra o corredor dos
+shapes da linha (`serviceCode`).
+
+**Peças novas:**
+- **Domínio (`domain/route`):** `RoutePath` (polilinha + bbox + teste de corredor
+  com pré-filtro por bounding box), `Geo` (haversine + distância ponto→segmento),
+  `RouteGeometrySource` (porta pura, não-bloqueante), `LineCodeKey` (normalização
+  **idêntica** ao `LineCode` do serviço — trim/upper + strip de zeros à esquerda).
+  `OutOfRouteRule` (§4.4): fora do corredor de **todos** os shapes ⇒ tag; sem
+  geometria ⇒ neutra. A precedência segue fixa no `PositionClassifier`.
+- **Aplicação:** `ResolveRouteShapesPort` (out), `ResolvedShapes`, `RouteGeometryCache`
+  — cache assíncrono **bounded** e stale-while-revalidate: o hot path só lê o que já
+  está resolvido; a resolução (I/O) roda em executor de background; sob pico o excesso
+  é descartado e re-tentado (§4.4).
+- **Infra:** `SppoGtfsShapeProvider` (WebClient → `GET /api/v1/lines/{lineCode}/shapes`,
+  decodifica encoded polyline; 404/no_shapes ⇒ vazio autoritativo; falha ⇒ retry),
+  `EncodedPolyline` (decoder Google precisão 5), `RouteAdherenceConfig` +
+  `RouteAdherenceProperties` (`gps.route`) + `SppoGtfsClientProperties` (`gps.gtfs-service`).
+
+**Flag / default:** `ROUTE_SHAPE_SOURCE=disabled` por padrão — nenhum bean HTTP é
+criado e a regra não é montada (comportamento idêntico ao atual). Com
+`gtfs-service`, aponta-se `SPPO_GTFS_BASE_URL` (e `SPPO_GTFS_API_KEY` se houver).
+Métrica: `gps.route.shape.resolve{result=shapes|empty|failure}`.
+
+**Débito/known-gaps desta fatia:**
+- Cache por **TTL** (6h). O contrato do serviço oferece `ETag`/`304` + `feedVersion.id`;
+  a revalidação por ETag ainda **não** foi implementada (melhoria de eficiência, não
+  bloqueia). 
+- Sem endpoints §7.1 (`/shapes/{id}`, `/corridor`) — fatia C.
+- `sppo-gtfs-service` ainda não hospedado (Oracle a provisionar); rodar em `demo`
+  para testes ponta a ponta locais.

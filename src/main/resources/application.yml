@@ -48,7 +48,19 @@ gps:
     current-snapshot-ttl: ${GPS_CURRENT_SNAPSHOT_TTL:15m}
   classification:
     stale-position-threshold: ${GPS_STALE_POSITION_THRESHOLD:5m}
-    out-of-route-distance-threshold-meters: ${GPS_OUT_OF_ROUTE_DISTANCE_THRESHOLD_METERS:100}
+  route:
+    # Fonte de itinerário (docs/regras-de-negocio.md §4.4, §8): disabled | gtfs-service.
+    # Com 'disabled' a regra OUT_OF_ROUTE nem é montada (comportamento do feed público).
+    shape-source: ${ROUTE_SHAPE_SOURCE:disabled}
+    corridor-meters: ${GPS_ROUTE_CORRIDOR_METERS:15}
+    fallback-distance-threshold-meters: ${GPS_OUT_OF_ROUTE_DISTANCE_THRESHOLD_METERS:100}
+    cache-ttl: ${GPS_ROUTE_SHAPE_CACHE_TTL:6h}
+    refresh-pool-size: ${GPS_ROUTE_REFRESH_POOL_SIZE:2}
+    refresh-queue-capacity: ${GPS_ROUTE_REFRESH_QUEUE_CAPACITY:500}
+  gtfs-service:
+    base-url: ${SPPO_GTFS_BASE_URL:http://localhost:8081}
+    api-key: ${SPPO_GTFS_API_KEY:}
+    request-timeout: ${SPPO_GTFS_REQUEST_TIMEOUT:5s}
   geofence:
     rio-municipality:
       min-latitude: ${RIO_MUNICIPALITY_MIN_LATITUDE:-23.10}
