@@ -9,6 +9,7 @@ import org.springframework.core.io.ClassPathResource;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 
 /** Carregamento do de-para de consórcios do classpath (docs/regras-de-negocio.md §6). */
 class PackagedOperatorDirectoryTest {
@@ -43,7 +44,11 @@ class PackagedOperatorDirectoryTest {
     @Test
     void shouldExposeAllConsortia() {
         assertThat(directory.findAll())
-                .extracting(Operator::prefix)
-                .containsExactly("A", "B", "C", "D");
+                .extracting(Operator::prefix, Operator::name)
+                .containsExactly(
+                        tuple("A", "Consórcio Intersul"),
+                        tuple("B", "Consórcio Internorte"),
+                        tuple("C", "Consórcio Transcarioca"),
+                        tuple("D", "Consórcio Santa Cruz"));
     }
 }
