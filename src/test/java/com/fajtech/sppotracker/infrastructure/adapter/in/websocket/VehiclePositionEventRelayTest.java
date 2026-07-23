@@ -44,7 +44,7 @@ class VehiclePositionEventRelayTest {
                 Instant.parse("2026-07-22T12:00:00Z"), Instant.parse("2026-07-22T12:00:02Z"),
                 null, Instant.parse("2026-07-22T12:00:03Z"), "DADOS_MOBILIDADE_RIO",
                 com.fajtech.sppotracker.domain.vehicle.VehiclePositionStatus.IN_OPERATION,
-                true, true, false, true, List.of(), "Empresa X");
+                true, true, false, true, List.of(), "Consórcio Intersul", "Auto Viacao Exemplo Ltda");
     }
 
     @Test

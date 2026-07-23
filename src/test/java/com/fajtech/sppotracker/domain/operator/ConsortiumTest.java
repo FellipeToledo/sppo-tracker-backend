@@ -6,34 +6,34 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /** Invariantes do value object de consórcio (docs/regras-de-negocio.md §6). */
-class OperatorTest {
+class ConsortiumTest {
 
     @Test
-    void shouldNormalizePrefixToUpperCase() {
-        assertThat(new Operator("a", "Consórcio Intersul").prefix()).isEqualTo("A");
+    void shouldNormalizeCodeToUpperCase() {
+        assertThat(new Consortium("a", "Consórcio Intersul").code()).isEqualTo("A");
     }
 
     @Test
     void shouldTrimName() {
-        assertThat(new Operator("A", "  Consórcio Intersul  ").name()).isEqualTo("Consórcio Intersul");
+        assertThat(new Consortium("A", "  Consórcio Intersul  ").name()).isEqualTo("Consórcio Intersul");
     }
 
     @Test
-    void shouldRejectMultiCharacterPrefix() {
-        assertThatThrownBy(() -> new Operator("A26I", "Consórcio Intersul"))
+    void shouldRejectMultiCharacterCode() {
+        assertThatThrownBy(() -> new Consortium("AB", "Consórcio Intersul"))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("single character");
+                .hasMessageContaining("exactly 1");
     }
 
     @Test
-    void shouldRejectBlankPrefix() {
-        assertThatThrownBy(() -> new Operator("  ", "Consórcio Intersul"))
+    void shouldRejectBlankCode() {
+        assertThatThrownBy(() -> new Consortium("  ", "Consórcio Intersul"))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void shouldRejectBlankName() {
-        assertThatThrownBy(() -> new Operator("A", "  "))
+        assertThatThrownBy(() -> new Consortium("A", "  "))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 }

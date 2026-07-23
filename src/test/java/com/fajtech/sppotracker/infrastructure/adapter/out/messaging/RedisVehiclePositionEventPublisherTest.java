@@ -1,7 +1,9 @@
 package com.fajtech.sppotracker.infrastructure.adapter.out.messaging;
 
 import com.fajtech.sppotracker.application.port.in.OperatorQueryUseCase;
-import com.fajtech.sppotracker.domain.operator.Operator;
+import com.fajtech.sppotracker.domain.operator.Company;
+import com.fajtech.sppotracker.domain.operator.Consortium;
+import com.fajtech.sppotracker.domain.operator.VehicleOperator;
 import com.fajtech.sppotracker.domain.vehicle.ClassifiedVehiclePosition;
 import com.fajtech.sppotracker.domain.vehicle.Coordinates;
 import com.fajtech.sppotracker.domain.vehicle.PositionClassification;
@@ -17,7 +19,6 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.util.Optional;
 import java.util.Set;
 
 import static org.mockito.Mockito.mock;
@@ -57,8 +58,11 @@ class RedisVehiclePositionEventPublisherTest {
     @Test
     void shouldPublishResponseJsonWithOperatorToChannel() throws Exception {
         ClassifiedVehiclePosition event = event();
-        when(operators.resolve("A12345")).thenReturn(Optional.of(new Operator("A", "Consórcio Intersul")));
-        String expectedJson = objectMapper.writeValueAsString(VehiclePositionResponse.from(event, "Consórcio Intersul"));
+        when(operators.resolve("A12345")).thenReturn(new VehicleOperator(
+                new Consortium("A", "Consórcio Intersul"),
+                new Company("A123", "Auto Viacao Exemplo Ltda")));
+        String expectedJson = objectMapper.writeValueAsString(
+                VehiclePositionResponse.from(event, "Consórcio Intersul", "Auto Viacao Exemplo Ltda"));
 
         publisher.publish(event);
 

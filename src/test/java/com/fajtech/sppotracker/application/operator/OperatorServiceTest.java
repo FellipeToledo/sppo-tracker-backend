@@ -1,7 +1,9 @@
 package com.fajtech.sppotracker.application.operator;
 
 import com.fajtech.sppotracker.application.port.out.OperatorDirectoryPort;
-import com.fajtech.sppotracker.domain.operator.Operator;
+import com.fajtech.sppotracker.domain.operator.Company;
+import com.fajtech.sppotracker.domain.operator.Consortium;
+import com.fajtech.sppotracker.domain.operator.VehicleOperator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -12,7 +14,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-/** Casos de uso de consórcio delegam ao de-para (docs/regras-de-negocio.md §6). */
+/** Casos de uso de operadora delegam ao de-para (docs/regras-de-negocio.md §6). */
 class OperatorServiceTest {
 
     private OperatorDirectoryPort directory;
@@ -25,25 +27,58 @@ class OperatorServiceTest {
     }
 
     @Test
-    void shouldReturnAllOperators() {
-        List<Operator> all = List.of(new Operator("A", "Consórcio Intersul"), new Operator("B", "Consórcio Internorte"));
-        when(directory.findAll()).thenReturn(all);
+    void shouldReturnAllConsortiums() {
+        List<Consortium> all = List.of(new Consortium("A", "Consórcio Intersul"));
+        when(directory.allConsortiums()).thenReturn(all);
 
-        assertThat(service.getAll()).isEqualTo(all);
+        assertThat(service.getConsortiums()).isEqualTo(all);
     }
 
     @Test
-    void shouldResolveOperatorByVehicleId() {
-        Operator op = new Operator("A", "Consórcio Intersul");
-        when(directory.findByVehicleId("A26123")).thenReturn(Optional.of(op));
+    void shouldReturnAllCompanies() {
+        List<Company> all = List.of(new Company("A410", "Real Auto Onibus Ltda"));
+        when(directory.allCompanies()).thenReturn(all);
 
-        assertThat(service.resolve("A26123")).contains(op);
+        assertThat(service.getCompanies()).isEqualTo(all);
     }
 
     @Test
-    void shouldReturnEmptyForUnknownVehicle() {
-        when(directory.findByVehicleId("Z99999")).thenReturn(Optional.empty());
+    void shouldResolveBothConsortiumAndCompany() {
+        Consortium consortium = new Consortium("A", "Consórcio Intersul");
+        Company company = new Company("A410", "Real Auto Onibus Ltda");
+        when(directory.findConsortium("A410999")).thenReturn(Optional.of(consortium));
+        when(directory.findCompany("A410999")).thenReturn(Optional.of(company));
 
-        assertThat(service.resolve("Z99999")).isEmpty();
+        VehicleOperator operator = service.resolve("A410999");
+
+        assertThat(operator.consortium()).isEqualTo(consortium);
+        assertThat(operator.company()).isEqualTo(company);
+        assertThat(operator.consortiumName()).isEqualTo("Consórcio Intersul");
+        assertThat(operator.companyName()).isEqualTo("Real Auto Onibus Ltda");
+    }
+
+    @Test
+    void shouldResolveConsortiumOnlyWhenCompanyUnknown() {
+        when(directory.findConsortium("A26123")).thenReturn(Optional.of(new Consortium("A", "Consórcio Intersul")));
+        when(directory.findCompany("A26123")).thenReturn(Optional.empty());
+
+        VehicleOperator operator = service.resolve("A26123");
+
+        assertThat(operator.consortiumName()).isEqualTo("Consórcio Intersul");
+        assertThat(operator.company()).isNull();
+        assertThat(operator.companyName()).isNull();
+    }
+
+    @Test
+    void shouldResolveNothingForUnknownVehicle() {
+        when(directory.findConsortium("Z99999")).thenReturn(Optional.empty());
+        when(directory.findCompany("Z99999")).thenReturn(Optional.empty());
+
+        VehicleOperator operator = service.resolve("Z99999");
+
+        assertThat(operator.consortium()).isNull();
+        assertThat(operator.company()).isNull();
+        assertThat(operator.consortiumName()).isNull();
+        assertThat(operator.companyName()).isNull();
     }
 }

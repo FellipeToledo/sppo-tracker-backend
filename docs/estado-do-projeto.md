@@ -103,13 +103,16 @@ polígonos de garagem. Por isso ficaram fora:
    `*IntegrationTest` — a **CI do GitHub Actions** os executa (tem Docker).
    ⚠️ **Não foram executados nesta sessão**: o egress bloqueia o pull de imagens
    Docker aqui; a verificação vem da CI do PR.
-3. **[ENDEREÇADO] `operators.json` populado com dados reais.** Passou de dataset
-   *starter* (prefixo de 4 chars fictício) para o **de-para real por consórcio**:
-   resolução pelo **1º caractere da ordem** (`A`→Intersul, `B`→Internorte,
-   `C`→Transcarioca, `D`→Santa Cruz — ver `docs/regras-de-negocio.md` §6). Escolha
-   deliberada: o feed público expõe a carroceria (ordem), não o CNPJ da empresa;
-   o consórcio (1º caractere) é a granularidade confiável e pública. Um de-para
-   empresa-a-empresa exigiria a relação de frota oficial da SMTR/consórcios.
+3. **[ENDEREÇADO] De-para de operadoras populado com dados reais (dois níveis).**
+   Saiu do dataset *starter* (prefixo de 4 chars fictício) para **dois de-paras
+   reais**: `consortiums.json` (1º caractere da ordem → consórcio; `A`→Intersul,
+   `B`→Internorte, `C`→Transcarioca, `D`→Santa Cruz — cobre toda a frota) e
+   `companies.json` (prefixo de 4 chars → empresa real da SMTR, ex.: `A410`→Real
+   Auto Onibus; cobertura parcial). Modelo de domínio: `Consortium`, `Company` e
+   `VehicleOperator`; a API expõe `consortiumName`+`companyName` por veículo e
+   `GET /api/v1/operators` lista empresas anotadas com o consórcio. Ver
+   `docs/regras-de-negocio.md` §6. *Manutenção:* atualizar `companies.json`
+   conforme novos prefixos entrem em operação (o consórcio nunca fica sem rótulo).
 
 ## 6. Convenções seguidas (para manter na próxima sessão)
 

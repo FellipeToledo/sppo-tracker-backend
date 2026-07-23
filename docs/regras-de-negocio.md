@@ -230,21 +230,31 @@ Eventos publicados em tempo real (Pub/Sub → WebSocket `/topic/route-deviations
 
 ---
 
-## 6. Consórcio do veículo (de-para ordem→consórcio)
+## 6. Operadora do veículo (de-para ordem→consórcio e →empresa)
 
-- Reference data **estática** (JSON empacotado), carregada uma vez na
-  inicialização (fora do hot path).
-- Resolve o **consórcio operador** pelo **primeiro caractere da ordem**
-  (`vehicleId`, upper-case), que identifica o consórcio — ver §1, formato
-  `XYYZZZ` (X=A–D):
+Reference data **estática** (JSONs empacotados), carregada uma vez na
+inicialização (fora do hot path). Resolve **dois níveis** a partir da ordem
+(`vehicleId`, upper-case; ver §1, formato `XYYZZZ`):
+
+- **Consórcio** — pelo **primeiro caractere** (`X` = A–D). Cobre **toda** a frota.
+  Fonte: `consortiums.json`.
   - `A` → Consórcio Intersul
   - `B` → Consórcio Internorte
   - `C` → Consórcio Transcarioca
   - `D` → Consórcio Santa Cruz
-- Exposto na API e usado no dashboard para rótulo/filtro por consórcio.
-- ℹ️ O feed público dá a **carroceria** (ordem), não o CNPJ da empresa; a
-  granularidade confiável e pública é o **consórcio** (1º caractere). Um de-para
-  empresa-a-empresa exigiria a relação de frota oficial da SMTR/consórcios.
+- **Empresa** — pelos **quatro primeiros caracteres** (letra do consórcio + 3
+  dígitos, ex.: `A410` → *Real Auto Onibus Ltda*). **Cobertura parcial**: só os
+  prefixos presentes no de-para; um veículo cujo prefixo não esteja mapeado
+  resolve **apenas** o consórcio (empresa nula). Fonte: `companies.json`.
+
+Ambos os arquivos são objetos JSON `chave → nome`. A posição exposta na API
+carrega `consortiumName` e `companyName`; `GET /api/v1/operators` lista as
+empresas conhecidas, cada uma anotada com o consórcio (`consortiumCode`,
+`consortiumName`). Usado no dashboard para rótulo/filtro por consórcio e empresa.
+
+> ℹ️ O feed público dá a **carroceria** (ordem), não o CNPJ. O consórcio (1º
+> caractere) cobre toda a frota; a empresa (prefixo de 4 chars) vem da relação de
+> frota da SMTR e é atualizada conforme novos prefixos entrem em operação.
 
 ---
 

@@ -36,9 +36,11 @@ public record VehiclePositionResponse(
         boolean insideGarage,
         boolean onRoute,
         List<ClassificationTag> tags,
-        String operatorName) {
+        String consortiumName,
+        String companyName) {
 
-    public static VehiclePositionResponse from(ClassifiedVehiclePosition classified, String operatorName) {
+    public static VehiclePositionResponse from(ClassifiedVehiclePosition classified,
+                                               String consortiumName, String companyName) {
         VehiclePosition p = classified.position();
         PositionClassification c = classified.classification();
         return new VehiclePositionResponse(
@@ -63,6 +65,7 @@ public record VehiclePositionResponse(
                 c.insideGarage(),
                 c.onRoute(),
                 List.copyOf(c.tags()),
-                operatorName);
+                consortiumName,
+                companyName);
     }
 }
