@@ -3,7 +3,7 @@ package com.fajtech.sppotracker.infrastructure.adapter.in.rest;
 import com.fajtech.sppotracker.application.port.in.GetCurrentVehiclePositionsUseCase;
 import com.fajtech.sppotracker.application.port.in.OperatorQueryUseCase;
 import com.fajtech.sppotracker.application.query.VehiclePositionFilter;
-import com.fajtech.sppotracker.domain.operator.Operator;
+import com.fajtech.sppotracker.domain.operator.VehicleOperator;
 import com.fajtech.sppotracker.domain.vehicle.ClassifiedVehiclePosition;
 import com.fajtech.sppotracker.domain.vehicle.VehiclePositionStatus;
 import com.fajtech.sppotracker.infrastructure.adapter.in.rest.dto.VehiclePositionResponse;
@@ -42,9 +42,7 @@ public class VehiclePositionController {
     }
 
     private VehiclePositionResponse toResponse(ClassifiedVehiclePosition classified) {
-        String operatorName = operators.resolve(classified.position().vehicleId())
-                .map(Operator::name)
-                .orElse(null);
-        return VehiclePositionResponse.from(classified, operatorName);
+        VehicleOperator operator = operators.resolve(classified.position().vehicleId());
+        return VehiclePositionResponse.from(classified, operator.consortiumName(), operator.companyName());
     }
 }

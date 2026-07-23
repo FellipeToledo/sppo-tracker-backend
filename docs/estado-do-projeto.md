@@ -103,8 +103,16 @@ polígonos de garagem. Por isso ficaram fora:
    `*IntegrationTest` — a **CI do GitHub Actions** os executa (tem Docker).
    ⚠️ **Não foram executados nesta sessão**: o egress bloqueia o pull de imagens
    Docker aqui; a verificação vem da CI do PR.
-3. **`operators.json` é um dataset *starter*** (4 entradas ilustrativas) — precisa
-   ser substituído pelos dados reais de operadoras da SMTR (de-para prefixo→empresa).
+3. **[ENDEREÇADO] De-para de operadoras populado com dados reais (dois níveis).**
+   Saiu do dataset *starter* (prefixo de 4 chars fictício) para **dois de-paras
+   reais**: `consortiums.json` (1º caractere da ordem → consórcio; `A`→Intersul,
+   `B`→Internorte, `C`→Transcarioca, `D`→Santa Cruz — cobre toda a frota) e
+   `companies.json` (prefixo de 4 chars → empresa real da SMTR, ex.: `A410`→Real
+   Auto Onibus; cobertura parcial). Modelo de domínio: `Consortium`, `Company` e
+   `VehicleOperator`; a API expõe `consortiumName`+`companyName` por veículo e
+   `GET /api/v1/operators` lista empresas anotadas com o consórcio. Ver
+   `docs/regras-de-negocio.md` §6. *Manutenção:* atualizar `companies.json`
+   conforme novos prefixos entrem em operação (o consórcio nunca fica sem rótulo).
 
 ## 6. Convenções seguidas (para manter na próxima sessão)
 
@@ -122,7 +130,8 @@ polígonos de garagem. Por isso ficaram fora:
 
 1. **Fechar débito técnico** (escolher (a) Testcontainers, (b) `contextLoads` leve,
    ou (c) manter como TODO).
-2. **Popular `operators.json`** com dados reais.
+2. ~~**Popular `operators.json`** com dados reais.~~ **Feito** (de-para por
+   consórcio, 1º caractere da ordem — ver §5, débito 3).
 3. **Deploy** na VM Oracle Cloud (docker compose; ver §10 de
    `docs/regras-de-negocio.md` — atenção aos dois firewalls).
 4. **Fonte de shapes** (GTFS/shape-geom) para destravar §5 / OUT_OF_ROUTE / geofence.
