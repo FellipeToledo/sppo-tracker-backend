@@ -106,6 +106,13 @@
         return Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
     }
 
+    // Escapa dados externos (feed da SMTR) antes de virar HTML no popup — evita XSS.
+    function esc(value) {
+        return String(value == null ? '' : value).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+
     function popupHtml(v) {
         const age = ageSeconds(v.positionTimestamp);
         const rows = [
@@ -116,7 +123,7 @@
             ['Idade', age != null ? age + ' s' : '—']
         ];
         return '<div class="popup">' + rows.map(function (r) {
-            return '<div><b>' + r[0] + ':</b> ' + r[1] + '</div>';
+            return '<div><b>' + esc(r[0]) + ':</b> ' + esc(r[1]) + '</div>';
         }).join('') + '</div>';
     }
 
