@@ -17,10 +17,10 @@ class MapViewControllerTest {
     private MockMvc mockMvc;
 
     @Test
-    void shouldRenderMapViewWithRefreshInterval() throws Exception {
+    void shouldRenderMapViewWithReconcileInterval() throws Exception {
         mockMvc.perform(get("/"))
                 .andExpect(status().isOk())
                 .andExpect(view().name("map"))
-                .andExpect(model().attributeExists("refreshSeconds"));
+                .andExpect(model().attributeExists("reconcileSeconds"));
     }
 }

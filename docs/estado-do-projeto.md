@@ -51,9 +51,10 @@ scheduler → readiness → cooldown → janela [now-90s, now] → fetch (provid
 
 ## 3. Endpoints disponíveis
 
-- `GET /` — **mapa de acompanhamento** (view Thymeleaf + Leaflet): plota o snapshot
-  atual da frota, colorido por status, com filtro por linha/status e auto-refresh.
-  Consome o REST abaixo; serve para "ir vendo e ajustando".
+- `GET /` — **mapa de acompanhamento** (view Thymeleaf + Leaflet), **tempo real via
+  WebSocket/STOMP** (`/ws` → `/topic/vehicle-positions`, marcadores reutilizados por
+  `vehicleId`): carga inicial + reconcile periódico pelo REST, updates ao vivo pelo WS.
+  Colorido por status, filtro client-side por linha/status, indicador de conexão.
 - `GET /api/v1/vehicle-positions/current?serviceCode=&routeId=&classificationStatus=`
 - `GET /api/v1/gps-polling/status` (204 se nenhum ciclo rodou)
 - `GET /api/v1/operators`

@@ -15,7 +15,11 @@
             border-radius: 10px; box-shadow: 0 2px 12px rgba(0,0,0,.35); font-size: 13px;
             max-width: 260px;
         }
-        .panel h1 { font-size: 15px; margin: 0 0 8px; font-weight: 600; }
+        .panel h1 { font-size: 15px; margin: 0 0 8px; font-weight: 600; display: flex;
+                    align-items: center; gap: 8px; }
+        .conn { width: 9px; height: 9px; border-radius: 50%; background: #95a5a6; flex: 0 0 auto; }
+        .conn.live { background: #2ecc71; box-shadow: 0 0 6px #2ecc71; }
+        .conn.down { background: #e74c3c; }
         .panel label { display: block; margin: 8px 0 3px; opacity: .8; }
         .panel input, .panel select {
             width: 100%; box-sizing: border-box; padding: 6px 8px; border-radius: 6px;
@@ -33,24 +37,26 @@
 <body>
 <div id="map"></div>
 <div class="panel">
-    <h1>SPPO Tracker</h1>
+    <h1><span class="conn" id="conn"></span> SPPO Tracker</h1>
     <label for="serviceCode">Linha (serviceCode)</label>
     <input id="serviceCode" type="text" placeholder="ex.: 100" autocomplete="off"/>
     <label for="status">Status de classificação</label>
     <select id="status">
         <option value="">Todos</option>
     </select>
-    <div class="status-line" id="statusLine">Carregando…</div>
+    <div class="status-line" id="statusLine">Conectando…</div>
     <div class="legend" id="legend"></div>
 </div>
 
 <script th:inline="javascript">
     /*<![CDATA[*/
-    window.REFRESH_SECONDS = /*[[${refreshSeconds}]]*/ 10;
+    window.RECONCILE_SECONDS = /*[[${reconcileSeconds}]]*/ 30;
     /*]]>*/
 </script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
         integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script src="https://cdn.jsdelivr.net/npm/sockjs-client@1.6.1/dist/sockjs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@stomp/stompjs@7.0.0/bundles/stomp.umd.min.js"></script>
 <script>
     // Cores por status de classificação (docs/regras-de-negocio.md §4).
     const STATUS_COLORS = {
@@ -74,9 +80,16 @@
     }).addTo(map);
     const layer = L.layerGroup().addTo(map);
 
-    // Popular filtro de status e legenda a partir do mapa de cores.
+    // Estado local: dado por veículo + marcador reutilizável (escala p/ milhares).
+    const vehicles = new Map();   // vehicleId -> payload
+    const markers = new Map();    // vehicleId -> L.circleMarker
+
     const statusSelect = document.getElementById('status');
     const legend = document.getElementById('legend');
+    const statusLine = document.getElementById('statusLine');
+    const serviceInput = document.getElementById('serviceCode');
+    const conn = document.getElementById('conn');
+
     Object.keys(STATUS_COLORS).forEach(function (s) {
         const opt = document.createElement('option');
         opt.value = s; opt.textContent = STATUS_LABELS[s] || s;
@@ -88,9 +101,6 @@
         legend.appendChild(item);
     });
 
-    const statusLine = document.getElementById('statusLine');
-    const serviceInput = document.getElementById('serviceCode');
-
     function ageSeconds(iso) {
         if (!iso) return null;
         return Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
@@ -99,11 +109,9 @@
     function popupHtml(v) {
         const age = ageSeconds(v.positionTimestamp);
         const rows = [
-            ['Veículo', v.vehicleId],
-            ['Linha', v.serviceCode || '—'],
+            ['Veículo', v.vehicleId], ['Linha', v.serviceCode || '—'],
             ['Status', STATUS_LABELS[v.classificationStatus] || v.classificationStatus],
-            ['Empresa', v.companyName || '—'],
-            ['Consórcio', v.consortiumName || '—'],
+            ['Empresa', v.companyName || '—'], ['Consórcio', v.consortiumName || '—'],
             ['Velocidade', v.speed != null ? v.speed + ' km/h' : '—'],
             ['Idade', age != null ? age + ' s' : '—']
         ];
@@ -112,44 +120,100 @@
         }).join('') + '</div>';
     }
 
-    function buildUrl() {
-        const params = new URLSearchParams();
-        if (serviceInput.value.trim()) params.set('serviceCode', serviceInput.value.trim());
-        if (statusSelect.value) params.set('classificationStatus', statusSelect.value);
-        const qs = params.toString();
-        return '/api/v1/vehicle-positions/current' + (qs ? '?' + qs : '');
+    function passesFilter(v) {
+        const code = serviceInput.value.trim().toUpperCase();
+        if (code && (v.serviceCode || '').toUpperCase() !== code) return false;
+        if (statusSelect.value && v.classificationStatus !== statusSelect.value) return false;
+        return true;
     }
 
-    async function refresh() {
-        try {
-            const res = await fetch(buildUrl(), { headers: { 'Accept': 'application/json' } });
-            if (!res.ok) throw new Error('HTTP ' + res.status);
-            const positions = await res.json();
-            layer.clearLayers();
-            positions.forEach(function (v) {
-                if (v.latitude == null || v.longitude == null) return;
-                L.circleMarker([v.latitude, v.longitude], {
-                    radius: 5, weight: 1, color: '#222',
-                    fillColor: STATUS_COLORS[v.classificationStatus] || '#7f8c8d',
-                    fillOpacity: 0.9
-                }).bindPopup(popupHtml(v)).addTo(layer);
-            });
-            statusLine.textContent = positions.length + ' veículos · '
-                + new Date().toLocaleTimeString('pt-BR');
-            statusLine.classList.remove('muted');
-        } catch (e) {
-            statusLine.textContent = 'Falha ao carregar: ' + e.message;
-            statusLine.classList.add('muted');
+    // Cria/atualiza/remove o marcador de um veículo conforme o filtro atual.
+    function renderVehicle(v) {
+        const visible = v.latitude != null && v.longitude != null && passesFilter(v);
+        let m = markers.get(v.vehicleId);
+        if (!visible) {
+            if (m) { layer.removeLayer(m); markers.delete(v.vehicleId); }
+            return;
+        }
+        const color = STATUS_COLORS[v.classificationStatus] || '#7f8c8d';
+        if (m) {
+            m.setLatLng([v.latitude, v.longitude]);
+            m.setStyle({ fillColor: color });
+            m.getPopup().setContent(popupHtml(v));
+        } else {
+            m = L.circleMarker([v.latitude, v.longitude], {
+                radius: 5, weight: 1, color: '#222', fillColor: color, fillOpacity: 0.9
+            }).bindPopup(popupHtml(v));
+            layer.addLayer(m);
+            markers.set(v.vehicleId, m);
         }
     }
 
-    let debounce;
-    function scheduleImmediate() { clearTimeout(debounce); debounce = setTimeout(refresh, 300); }
-    serviceInput.addEventListener('input', scheduleImmediate);
-    statusSelect.addEventListener('change', refresh);
+    function renderAll() {
+        vehicles.forEach(renderVehicle);
+        updateStatusLine();
+    }
 
-    refresh();
-    setInterval(refresh, Math.max(2, window.REFRESH_SECONDS) * 1000);
+    function updateStatusLine(extra) {
+        statusLine.textContent = markers.size + ' visíveis · ' + vehicles.size + ' na frota'
+            + (extra ? ' · ' + extra : '') + ' · ' + new Date().toLocaleTimeString('pt-BR');
+    }
+
+    function upsert(v) {
+        if (!v || !v.vehicleId) return;
+        vehicles.set(v.vehicleId, v);
+        renderVehicle(v);
+    }
+
+    // Reconcile via REST: fonte de verdade do snapshot atual (remove quem sumiu).
+    async function reconcile() {
+        try {
+            const res = await fetch('/api/v1/vehicle-positions/current', { headers: { 'Accept': 'application/json' } });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const list = await res.json();
+            const seen = new Set();
+            list.forEach(function (v) { seen.add(v.vehicleId); vehicles.set(v.vehicleId, v); });
+            vehicles.forEach(function (_, id) {
+                if (!seen.has(id)) {
+                    const m = markers.get(id);
+                    if (m) { layer.removeLayer(m); markers.delete(id); }
+                    vehicles.delete(id);
+                }
+            });
+            renderAll();
+        } catch (e) {
+            updateStatusLine('reconcile falhou: ' + e.message);
+        }
+    }
+
+    // Filtros re-renderizam sem novo fetch (dado já em memória).
+    let debounce;
+    serviceInput.addEventListener('input', function () { clearTimeout(debounce); debounce = setTimeout(renderAll, 250); });
+    statusSelect.addEventListener('change', renderAll);
+
+    function setConn(state) {
+        conn.className = 'conn ' + state;
+    }
+
+    // WebSocket/STOMP: tempo real de verdade.
+    const stomp = new StompJs.Client({
+        webSocketFactory: function () { return new SockJS('/ws'); },
+        reconnectDelay: 5000,
+        onConnect: function () {
+            setConn('live');
+            stomp.subscribe('/topic/vehicle-positions', function (msg) {
+                try { upsert(JSON.parse(msg.body)); } catch (e) { /* ignora evento malformado */ }
+            });
+            updateStatusLine('ao vivo');
+        },
+        onWebSocketClose: function () { setConn('down'); },
+        onStompError: function () { setConn('down'); }
+    });
+
+    setConn('');
+    reconcile();                 // carga inicial imediata
+    stomp.activate();            // stream ao vivo
+    setInterval(reconcile, Math.max(10, window.RECONCILE_SECONDS) * 1000);
 </script>
 </body>
 </html>
