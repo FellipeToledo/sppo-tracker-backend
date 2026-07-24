@@ -57,6 +57,19 @@ gps:
     cache-ttl: ${GPS_ROUTE_SHAPE_CACHE_TTL:6h}
     refresh-pool-size: ${GPS_ROUTE_REFRESH_POOL_SIZE:2}
     refresh-queue-capacity: ${GPS_ROUTE_REFRESH_QUEUE_CAPACITY:500}
+    # Máquina de desvio de itinerário (docs/regras-de-negocio.md §5). Só atua com
+    # shape-source=gtfs-service (depende de geometria).
+    deviation:
+      enabled: ${GPS_ROUTE_DEVIATION_ENABLED:true}
+      confirmation-margin-meters: ${GPS_ROUTE_DEVIATION_CONFIRMATION_MARGIN_METERS:30}
+      alert-points: ${GPS_ROUTE_DEVIATION_ALERT_POINTS:3}
+      confirm-sustained: ${GPS_ROUTE_DEVIATION_CONFIRM_SUSTAINED:3m}
+      confirm-distance-meters: ${GPS_ROUTE_DEVIATION_CONFIRM_DISTANCE_METERS:150}
+      return-points: ${GPS_ROUTE_DEVIATION_RETURN_POINTS:3}
+      severity-medio-meters: ${GPS_ROUTE_DEVIATION_SEVERITY_MEDIO_METERS:150}
+      severity-grave-meters: ${GPS_ROUTE_DEVIATION_SEVERITY_GRAVE_METERS:500}
+      state-ttl: ${GPS_ROUTE_DEVIATION_STATE_TTL:6h}
+      sweep-interval: ${GPS_ROUTE_DEVIATION_SWEEP_INTERVAL:30s}
   gtfs-service:
     base-url: ${SPPO_GTFS_BASE_URL:http://localhost:8081}
     api-key: ${SPPO_GTFS_API_KEY:}

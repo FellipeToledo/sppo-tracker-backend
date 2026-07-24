@@ -322,7 +322,7 @@ das posições (ingestão, envio, servidor), resolução de shapes. Endpoints
 | `GPS_ROUTE_DEVIATION_RETURN_POINTS` | `3` | pontos consecutivos p/ RETURN |
 | `GPS_ROUTE_DEVIATION_SWEEP_INTERVAL` | `30s` | intervalo do sweep |
 | `GPS_ROUTE_DEVIATION_STATE_TTL` | `6h` | TTL do estado de desvio |
-| `GPS_ROUTE_DEVIATION_SEVERITY_MEDIUM_METERS` / `_HIGH_METERS` | `150` / `500` | limiares de severidade |
+| `GPS_ROUTE_DEVIATION_SEVERITY_MEDIO_METERS` / `_GRAVE_METERS` | `150` / `500` | limiares de severidade (LEVE/MEDIO/GRAVE) |
 | `REDIS_HOST` / `REDIS_PORT` | `localhost` / `6379` | Redis |
 | `DB_HOST` / `DB_PORT` / `DB_NAME` / `DB_USER` / `DB_PASSWORD` | localhost / 5432 / sppotracker / … | Postgres |
 | `SERVER_PORT` | `8080` | porta HTTP |

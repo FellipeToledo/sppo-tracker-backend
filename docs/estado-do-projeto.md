@@ -28,7 +28,7 @@ scheduler → readiness → cooldown → janela [now-90s, now] → fetch (provid
   `spring-boot-starter-webmvc-test` (o `@WebMvcTest` mudou para
   `org.springframework.boot.webmvc.test.autoconfigure`). Annotations Jackson
   permanecem em `com.fasterxml.jackson.annotation`.
-- **Testes:** `mvn --batch-mode test` → **168 testes, 0 falhas** (todos herméticos:
+- **Testes:** `mvn --batch-mode test` → **188 testes, 0 falhas** (todos herméticos:
   sem Redis/Postgres/rede reais — usam mocks, `SimpleMeterRegistry`, MockWebServer,
   `@WebMvcTest`).
 - **Branch de trabalho:** `claude/sppo-tracker-setup-cd7vmo`. **Nenhum PR aberto**
@@ -59,7 +59,8 @@ scheduler → readiness → cooldown → janela [now-90s, now] → fetch (provid
 - `GET /api/v1/gps-polling/status` (204 se nenhum ciclo rodou)
 - `GET /api/v1/operators`
 - WebSocket STOMP: `/ws` → assinar `/topic/vehicle-positions`
-  (e `/service/{serviceCode}`, `/route/{routeId}`)
+  (e `/service/{serviceCode}`, `/route/{routeId}`); `/topic/route-deviations`
+  (e `/route/{routeId}`) para eventos de desvio (§9)
 - `GET /actuator/health`, `GET /actuator/prometheus`
 
 Métricas: `gps.polling.cycles{outcome}`, `gps.polling.cycle.duration`,
@@ -75,11 +76,10 @@ Métricas: `gps.polling.cycles{outcome}`, `gps.polling.cycle.duration`,
 O feed público da SMTR **não fornece** `routeId`/`shapeId`/sentido, nem shapes ou
 polígonos de garagem. Por isso ficaram fora:
 
-- **§5 — Máquina de estados de desvio de rota (C1 ALERT / C2 CONFIRMED / RETURN /
-  CANCELLED), severidade, sweep.** Depende de aderência dentro/fora do corredor
-  (geometria de shapes). **A persistência já está pronta** para receber os eventos
-  (`route_deviation_event`, entidade e repositório existem; falta o *escritor*).
-  A geometria já está disponível (fatia A — ver §8 abaixo); é o próximo passo.
+- ~~**§5 — Máquina de estados de desvio de rota.**~~ **FEITO (fatia B — ver §9).**
+  Máquina pura (ALERT/CONFIRMED/RETURN/CANCELLED + severidade + sweep), *escritor*
+  Postgres, publisher Redis→STOMP `/topic/route-deviations`. Desligada com a fonte
+  de shapes off (default).
 - ~~**Regra `OUT_OF_ROUTE`** — sem produtor.~~ **FEITO (fatia A):** produtor
   ligado via `sppo-gtfs-service` (repo separado, BigQuery/GTFS da SMTR). Fica
   **desligado por default** (`ROUTE_SHAPE_SOURCE=disabled`); com `gtfs-service`,
@@ -185,3 +185,41 @@ Métrica: `gps.route.shape.resolve{result=shapes|empty|failure}`.
 - Sem endpoints §7.1 (`/shapes/{id}`, `/corridor`) — fatia C.
 - `sppo-gtfs-service` ainda não hospedado (Oracle a provisionar); rodar em `demo`
   para testes ponta a ponta locais.
+
+---
+
+## 9. Fatia B — máquina de desvio de itinerário (§5)
+
+Detecção de episódios de desvio, **ortogonal à classificação** e **fora do hot path**.
+
+**B1 — núcleo puro (`domain/route`):**
+- `RouteAdherenceEvaluator` — lógica **única** dentro/fora **+ distância**, reusada pela
+  `OutOfRouteRule` e pela máquina (fecha o TODO §10 de unificação).
+- `RouteDeviationDetector` — máquina de estados por veículo: `ALERT` (N pontos fora) →
+  `CONFIRMED` (sustentado por tempo **ou** distância) → `RETURN`/`CANCELLED`; `sweep`
+  consolida veículos silenciosos. "Efetivamente fora" = fora **e** distância > margem
+  (§5.2). Enums, `DeviationSeverity` (§5.4), `VehicleDeviationState`, `DeviationConfig`,
+  `RouteDeviationEvent`, `DeviationOutcome`. Tudo coberto por teste.
+
+**B2 — wiring (fora do hot path):**
+- `RouteDeviationService` (aplicação) — cache de estado por veículo (TTL 6h, poda no
+  sweep), transições serializadas por `compute`, I/O de persistência/publicação fora do
+  lock. Alimentado pelo `RouteDeviationPositionSubscriber` (consome o canal Redis de
+  posições, mesmo payload do REST) — nada é adicionado ao pipeline de ingestão.
+- Saída: `JpaRouteDeviationEventWriter` → `route_deviation_event` (migração **V2** adiciona
+  `service_code`); `RedisRouteDeviationEventPublisher` → canal Redis → `RouteDeviationEventRelay`
+  → STOMP `/topic/route-deviations` [`/route/{routeId}`].
+- `RouteDeviationSweepScheduler` (`@Scheduled`, 30s). Config `gps.route.deviation.*`
+  (`RouteDeviationProperties`).
+
+**Flag / default:** gated por `gps.route.shape-source=gtfs-service` (depende de geometria)
+**e** `gps.route.deviation.enabled` (default true). Com a fonte **disabled** (default),
+nenhum bean é criado — comportamento inalterado.
+
+**Known-gaps desta fatia:**
+- Sem endpoint REST de histórico de desvios (a tabela é escrita; falta expor `GET`).
+- Sem métrica `gps.route.deviations{type}` ainda (observabilidade — follow-up).
+- Observação = posições **mudadas** (o stream publicado já é pós-dedup/mudança); posições
+  idênticas repetidas não contam como novos pontos.
+- Não exercitado com `shape-source=gtfs-service` em teste hermético (precisa de
+  Redis/JPA/WebClient) — validação vem da CI/integração ou do run local.
