@@ -2,6 +2,7 @@ package com.fajtech.sppotracker.application.route;
 
 import com.fajtech.sppotracker.application.port.out.PublishRouteDeviationEventPort;
 import com.fajtech.sppotracker.application.port.out.RecordRouteDeviationEventPort;
+import com.fajtech.sppotracker.application.port.out.RouteDeviationMetricsPort;
 import com.fajtech.sppotracker.domain.route.DeviationConfig;
 import com.fajtech.sppotracker.domain.route.DeviationEventType;
 import com.fajtech.sppotracker.domain.route.RouteAdherenceEvaluator;
@@ -32,8 +33,10 @@ class RouteDeviationServiceTest {
 
     private final List<RouteDeviationEvent> recorded = new ArrayList<>();
     private final List<RouteDeviationEvent> published = new ArrayList<>();
+    private final List<DeviationEventType> metered = new ArrayList<>();
     private final RecordRouteDeviationEventPort recorder = recorded::add;
     private final PublishRouteDeviationEventPort publisher = published::add;
+    private final RouteDeviationMetricsPort metrics = (type, severity) -> metered.add(type);
 
     private static Coordinates at(double lat, double lon) {
         return new Coordinates(BigDecimal.valueOf(lat), BigDecimal.valueOf(lon));
@@ -55,7 +58,7 @@ class RouteDeviationServiceTest {
     private RouteDeviationService serviceWith(RouteGeometrySource geometry) {
         RouteAdherenceEvaluator evaluator = new RouteAdherenceEvaluator(geometry, 15.0, 100.0);
         return new RouteDeviationService(evaluator, new RouteDeviationDetector(), CFG,
-                Clock.fixed(T0, ZoneOffset.UTC), Duration.ofHours(6), recorder, publisher);
+                Clock.fixed(T0, ZoneOffset.UTC), Duration.ofHours(6), recorder, publisher, metrics);
     }
 
     @Test
@@ -70,6 +73,7 @@ class RouteDeviationServiceTest {
         assertThat(recorded).hasSize(1);
         assertThat(recorded.getFirst().type()).isEqualTo(DeviationEventType.ALERT);
         assertThat(published).containsExactlyElementsOf(recorded);
+        assertThat(metered).containsExactly(DeviationEventType.ALERT);
         assertThat(service.trackedVehicles()).isEqualTo(1);
     }
 

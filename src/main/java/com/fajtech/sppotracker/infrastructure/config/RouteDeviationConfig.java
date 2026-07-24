@@ -2,6 +2,7 @@ package com.fajtech.sppotracker.infrastructure.config;
 
 import com.fajtech.sppotracker.application.port.out.PublishRouteDeviationEventPort;
 import com.fajtech.sppotracker.application.port.out.RecordRouteDeviationEventPort;
+import com.fajtech.sppotracker.application.port.out.RouteDeviationMetricsPort;
 import com.fajtech.sppotracker.application.route.RouteDeviationService;
 import com.fajtech.sppotracker.domain.route.DeviationConfig;
 import com.fajtech.sppotracker.domain.route.RouteAdherenceEvaluator;
@@ -66,9 +67,10 @@ public class RouteDeviationConfig {
                                                        Clock clock,
                                                        RouteDeviationProperties properties,
                                                        RecordRouteDeviationEventPort recorder,
-                                                       PublishRouteDeviationEventPort publisher) {
+                                                       PublishRouteDeviationEventPort publisher,
+                                                       RouteDeviationMetricsPort metrics) {
         return new RouteDeviationService(routeAdherenceEvaluator, routeDeviationDetector, deviationConfig,
-                clock, properties.stateTtl(), recorder, publisher);
+                clock, properties.stateTtl(), recorder, publisher, metrics);
     }
 
     @Bean

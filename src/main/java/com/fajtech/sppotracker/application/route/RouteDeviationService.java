@@ -2,6 +2,7 @@ package com.fajtech.sppotracker.application.route;
 
 import com.fajtech.sppotracker.application.port.out.PublishRouteDeviationEventPort;
 import com.fajtech.sppotracker.application.port.out.RecordRouteDeviationEventPort;
+import com.fajtech.sppotracker.application.port.out.RouteDeviationMetricsPort;
 import com.fajtech.sppotracker.domain.route.DeviationConfig;
 import com.fajtech.sppotracker.domain.route.DeviationOutcome;
 import com.fajtech.sppotracker.domain.route.RouteAdherence;
@@ -39,12 +40,14 @@ public final class RouteDeviationService {
     private final Duration stateTtl;
     private final RecordRouteDeviationEventPort recorder;
     private final PublishRouteDeviationEventPort publisher;
+    private final RouteDeviationMetricsPort metrics;
 
     private final Map<String, VehicleDeviationState> states = new ConcurrentHashMap<>();
 
     public RouteDeviationService(RouteAdherenceEvaluator evaluator, RouteDeviationDetector detector,
                                  DeviationConfig config, Clock clock, Duration stateTtl,
-                                 RecordRouteDeviationEventPort recorder, PublishRouteDeviationEventPort publisher) {
+                                 RecordRouteDeviationEventPort recorder, PublishRouteDeviationEventPort publisher,
+                                 RouteDeviationMetricsPort metrics) {
         this.evaluator = Objects.requireNonNull(evaluator, "evaluator");
         this.detector = Objects.requireNonNull(detector, "detector");
         this.config = Objects.requireNonNull(config, "config");
@@ -52,6 +55,7 @@ public final class RouteDeviationService {
         this.stateTtl = Objects.requireNonNull(stateTtl, "stateTtl");
         this.recorder = Objects.requireNonNull(recorder, "recorder");
         this.publisher = Objects.requireNonNull(publisher, "publisher");
+        this.metrics = Objects.requireNonNull(metrics, "metrics");
     }
 
     /** Processa uma observação de posição e emite os eventos de desvio resultantes. */
@@ -101,6 +105,7 @@ public final class RouteDeviationService {
         for (RouteDeviationEvent event : events) {
             recorder.record(event);
             publisher.publish(event);
+            metrics.recordEmitted(event.type(), event.severity());
         }
     }
 }

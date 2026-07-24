@@ -68,7 +68,8 @@ Métricas: `gps.polling.cycles{outcome}`, `gps.polling.cycle.duration`,
 `gps.polling.consecutive.failures`, `gps.ingestion.positions{result}`,
 `gps.classifications{status}`, `gps.position.age`,
 `gps.provider.requests{outcome}`, `gps.provider.request.duration`,
-`gps.provider.window.seconds`.
+`gps.provider.window.seconds`, `gps.route.deviations{type,severity}`,
+`gps.route.shape.resolve{result}`.
 
 ---
 
@@ -221,7 +222,8 @@ nenhum bean é criado — comportamento inalterado.
 - ~~Sem endpoint REST de histórico.~~ **Feito:** `GET /api/v1/route-deviations`
   (filtros vehicleId/serviceCode/type/severity/limit) + destaque no mapa (anel
   vermelho para episódio aberto) e lista "Desvios recentes" (WS ao vivo + carga REST).
-- Sem métrica `gps.route.deviations{type}` ainda (observabilidade — follow-up).
+- ~~Sem métrica de desvios.~~ **Feito:** `gps.route.deviations{type,severity}` (contador
+  Micrometer por evento emitido) em `/actuator/prometheus`.
 - Observação = posições **mudadas** (o stream publicado já é pós-dedup/mudança); posições
   idênticas repetidas não contam como novos pontos.
 - Não exercitado com `shape-source=gtfs-service` em teste hermético (precisa de

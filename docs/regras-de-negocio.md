@@ -280,7 +280,9 @@ empresas conhecidas, cada uma anotada com o consórcio (`consortiumCode`,
 Polling (execuções, duração, falhas consecutivas, últimos contadores
 received/valid/duplicated/changed/published/ignored), provider (chamadas
 externas, duração, janela solicitada), classificações por status, idade/atrasos
-das posições (ingestão, envio, servidor), resolução de shapes. Endpoints
+das posições (ingestão, envio, servidor), resolução de shapes
+(`gps.route.shape.resolve{result}`) e desvios de itinerário
+(`gps.route.deviations{type,severity}`). Endpoints
 `/actuator/health`, `/actuator/prometheus`.
 
 ### 7.4 Persistência
