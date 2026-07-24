@@ -1,5 +1,6 @@
 package com.fajtech.sppotracker;
 
+import com.fajtech.sppotracker.infrastructure.adapter.out.persistence.RouteDeviationEventRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
@@ -37,6 +38,11 @@ class SppoTrackerBackendApplicationTests {
 
     @MockitoBean
     private RedisMessageListenerContainer redisMessageListenerContainer;
+
+    // JPA está excluída neste smoke hermético; o repositório do histórico de desvios
+    // é mockado para o adapter/endpoint de leitura carregarem (semântica real nos *IT).
+    @MockitoBean
+    private RouteDeviationEventRepository routeDeviationEventRepository;
 
     @Test
     void contextLoads() {

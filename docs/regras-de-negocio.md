@@ -267,6 +267,7 @@ empresas conhecidas, cada uma anotada com o consórcio (`consortiumCode`,
 | GET | `/api/v1/gps-polling/status` | status do último ciclo de polling |
 | GET | `/api/v1/garages` | lista de garagens (geofences) |
 | GET | `/api/v1/operators` | de-para de operadoras |
+| GET | `/api/v1/route-deviations` | histórico de desvios; filtros: `vehicleId`, `serviceCode`, `type`, `severity`, `limit` |
 | GET | `/api/v1/shapes/{shapeId}` | geometria do shape (quando fonte disponível) |
 | GET | `/api/v1/shapes/{shapeId}/corridor` | corredor (buffer) do shape |
 

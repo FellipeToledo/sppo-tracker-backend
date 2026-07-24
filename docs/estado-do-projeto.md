@@ -58,6 +58,7 @@ scheduler → readiness → cooldown → janela [now-90s, now] → fetch (provid
 - `GET /api/v1/vehicle-positions/current?serviceCode=&routeId=&classificationStatus=`
 - `GET /api/v1/gps-polling/status` (204 se nenhum ciclo rodou)
 - `GET /api/v1/operators`
+- `GET /api/v1/route-deviations?vehicleId=&serviceCode=&type=&severity=&limit=` (histórico §5)
 - WebSocket STOMP: `/ws` → assinar `/topic/vehicle-positions`
   (e `/service/{serviceCode}`, `/route/{routeId}`); `/topic/route-deviations`
   (e `/route/{routeId}`) para eventos de desvio (§9)
@@ -217,7 +218,9 @@ Detecção de episódios de desvio, **ortogonal à classificação** e **fora do
 nenhum bean é criado — comportamento inalterado.
 
 **Known-gaps desta fatia:**
-- Sem endpoint REST de histórico de desvios (a tabela é escrita; falta expor `GET`).
+- ~~Sem endpoint REST de histórico.~~ **Feito:** `GET /api/v1/route-deviations`
+  (filtros vehicleId/serviceCode/type/severity/limit) + destaque no mapa (anel
+  vermelho para episódio aberto) e lista "Desvios recentes" (WS ao vivo + carga REST).
 - Sem métrica `gps.route.deviations{type}` ainda (observabilidade — follow-up).
 - Observação = posições **mudadas** (o stream publicado já é pós-dedup/mudança); posições
   idênticas repetidas não contam como novos pontos.

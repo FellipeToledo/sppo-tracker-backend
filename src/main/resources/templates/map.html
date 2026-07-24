@@ -32,6 +32,15 @@
                border: 1px solid rgba(255,255,255,.55); }
         .muted { opacity: .6; }
         .popup b { display: inline-block; min-width: 78px; color: #555; font-weight: 500; }
+        .ring { width: 12px; height: 12px; border-radius: 50%; flex: 0 0 auto;
+                background: transparent; border: 2px solid #e74c3c; }
+        .section-title { margin-top: 12px; font-size: 11px; text-transform: uppercase;
+                         letter-spacing: .05em; opacity: .55; }
+        .dev-list { margin-top: 6px; max-height: 170px; overflow-y: auto; }
+        .dev-row { display: flex; align-items: center; gap: 6px; padding: 3px 0;
+                   font-size: 12px; border-top: 1px solid #262c37; }
+        .badge { font-size: 10px; padding: 1px 5px; border-radius: 4px; color: #111; font-weight: 600; }
+        .dev-empty { opacity: .5; font-size: 12px; margin-top: 6px; }
     </style>
 </head>
 <body>
@@ -46,6 +55,8 @@
     </select>
     <div class="status-line" id="statusLine">Conectando…</div>
     <div class="legend" id="legend"></div>
+    <div class="section-title">Desvios recentes</div>
+    <div class="dev-list" id="devList"><div class="dev-empty">nenhum ainda</div></div>
 </div>
 
 <script th:inline="javascript">
@@ -73,6 +84,11 @@
         OUT_OF_MUNICIPALITY: 'Fora do município', OUT_OF_ROUTE: 'Fora de rota',
         SUSPICIOUS: 'Código suspeito', STALE: 'Posição obsoleta', INVALID: 'Inválida'
     };
+    // Desvios de itinerário (docs/regras-de-negocio.md §5).
+    const SEVERITY_COLORS = { LEVE: '#f1c40f', MEDIO: '#e67e22', GRAVE: '#e74c3c' };
+    const DEV_TYPE_LABELS = { ALERT: 'Alerta', CONFIRMED: 'Confirmado', RETURN: 'Retorno', CANCELLED: 'Cancelado' };
+    const activeDeviations = new Map(); // vehicleId -> { type, severity } (episódio aberto)
+    const MAX_DEV_ROWS = 40;
 
     const map = L.map('map', { zoomControl: true }).setView([-22.9068, -43.1729], 11);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -89,6 +105,7 @@
     const statusLine = document.getElementById('statusLine');
     const serviceInput = document.getElementById('serviceCode');
     const conn = document.getElementById('conn');
+    const devList = document.getElementById('devList');
 
     Object.keys(STATUS_COLORS).forEach(function (s) {
         const opt = document.createElement('option');
@@ -100,6 +117,11 @@
             + (STATUS_LABELS[s] || s);
         legend.appendChild(item);
     });
+    // Legenda do destaque de desvio (anel vermelho).
+    const devLegend = document.createElement('div');
+    devLegend.className = 'item';
+    devLegend.innerHTML = '<span class="ring"></span> Em desvio de rota';
+    legend.appendChild(devLegend);
 
     function ageSeconds(iso) {
         if (!iso) return null;
@@ -143,14 +165,17 @@
             return;
         }
         const color = STATUS_COLORS[v.classificationStatus] || '#7f8c8d';
+        const deviating = activeDeviations.has(v.vehicleId);
+        const style = deviating
+            ? { radius: 7, weight: 3, color: '#e74c3c', fillColor: color, fillOpacity: 0.9 }
+            : { radius: 5, weight: 1, color: '#222', fillColor: color, fillOpacity: 0.9 };
         if (m) {
             m.setLatLng([v.latitude, v.longitude]);
-            m.setStyle({ fillColor: color });
+            m.setStyle(style);
+            m.setRadius(style.radius);
             m.getPopup().setContent(popupHtml(v));
         } else {
-            m = L.circleMarker([v.latitude, v.longitude], {
-                radius: 5, weight: 1, color: '#222', fillColor: color, fillOpacity: 0.9
-            }).bindPopup(popupHtml(v));
+            m = L.circleMarker([v.latitude, v.longitude], style).bindPopup(popupHtml(v));
             layer.addLayer(m);
             markers.set(v.vehicleId, m);
         }
@@ -193,6 +218,64 @@
         }
     }
 
+    // --- Desvios de itinerário (§5) ---
+    function isActiveDeviation(type) {
+        return type === 'ALERT' || type === 'CONFIRMED';
+    }
+
+    function applyDeviationState(ev) {
+        if (!ev || !ev.vehicleId) return;
+        if (isActiveDeviation(ev.type)) {
+            activeDeviations.set(ev.vehicleId, { type: ev.type, severity: ev.severity });
+        } else {
+            activeDeviations.delete(ev.vehicleId); // RETURN / CANCELLED fecham o episódio
+        }
+    }
+
+    function deviationRowHtml(ev) {
+        const color = SEVERITY_COLORS[ev.severity] || '#95a5a6';
+        const time = ev.occurredAt ? new Date(ev.occurredAt).toLocaleTimeString('pt-BR') : '';
+        return '<span class="badge" style="background:' + color + '">'
+            + esc(DEV_TYPE_LABELS[ev.type] || ev.type) + '</span>'
+            + '<span>' + esc(ev.vehicleId) + '</span>'
+            + '<span class="muted">' + esc(ev.serviceCode || '—') + '</span>'
+            + '<span class="muted" style="margin-left:auto">' + esc(time) + '</span>';
+    }
+
+    function prependDeviationRow(ev) {
+        const empty = devList.querySelector('.dev-empty');
+        if (empty) empty.remove();
+        const row = document.createElement('div');
+        row.className = 'dev-row';
+        row.innerHTML = deviationRowHtml(ev);
+        devList.prepend(row);
+        while (devList.children.length > MAX_DEV_ROWS) {
+            devList.removeChild(devList.lastChild);
+        }
+    }
+
+    function onDeviation(ev) {
+        applyDeviationState(ev);
+        const v = vehicles.get(ev.vehicleId);
+        if (v) renderVehicle(v); // re-estiliza o marcador (anel vermelho / normal)
+        prependDeviationRow(ev);
+    }
+
+    // Carga inicial do histórico (mais recente primeiro) via REST.
+    async function loadDeviationHistory() {
+        try {
+            const res = await fetch('/api/v1/route-deviations?limit=30', { headers: { 'Accept': 'application/json' } });
+            if (!res.ok) return;
+            const list = await res.json();
+            const seeded = new Set();
+            list.forEach(function (ev) {          // o mais recente por veículo define o estado ativo
+                if (!seeded.has(ev.vehicleId)) { seeded.add(ev.vehicleId); applyDeviationState(ev); }
+            });
+            list.slice().reverse().forEach(prependDeviationRow); // fica com o mais novo no topo
+            renderAll();
+        } catch (e) { /* silencioso */ }
+    }
+
     // Filtros re-renderizam sem novo fetch (dado já em memória).
     let debounce;
     serviceInput.addEventListener('input', function () { clearTimeout(debounce); debounce = setTimeout(renderAll, 250); });
@@ -211,6 +294,9 @@
             stomp.subscribe('/topic/vehicle-positions', function (msg) {
                 try { upsert(JSON.parse(msg.body)); } catch (e) { /* ignora evento malformado */ }
             });
+            stomp.subscribe('/topic/route-deviations', function (msg) {
+                try { onDeviation(JSON.parse(msg.body)); } catch (e) { /* ignora evento malformado */ }
+            });
             updateStatusLine('ao vivo');
         },
         onWebSocketClose: function () { setConn('down'); },
@@ -218,8 +304,9 @@
     });
 
     setConn('');
-    reconcile();                 // carga inicial imediata
-    stomp.activate();            // stream ao vivo
+    reconcile();                 // carga inicial imediata das posições
+    loadDeviationHistory();      // histórico de desvios + estado ativo
+    stomp.activate();            // stream ao vivo (posições + desvios)
     setInterval(reconcile, Math.max(10, window.RECONCILE_SECONDS) * 1000);
 </script>
 </body>
