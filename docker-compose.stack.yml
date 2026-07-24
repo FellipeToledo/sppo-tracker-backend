@@ -1,0 +1,89 @@
+# Stack unificado de produção: sppo-tracker-backend + sppo-gtfs-service + Redis + Postgres.
+#
+# Os dois serviços vivem em repositórios separados; este compose espera que ambos estejam
+# clonados lado a lado (repos irmãos):
+#
+#   parent/
+#     sppo-tracker-backend/   <- este repo (rode o compose daqui)
+#     sppo-gtfs-service/      <- build context ../sppo-gtfs-service (ajustável por GTFS_SERVICE_PATH)
+#
+# Uso:
+#   cp .env.stack.example .env.stack   &&   editar valores
+#   mkdir -p secrets   &&   colocar a chave do GCP em secrets/gcp-sa.json (BigQuery real)
+#   docker compose -f docker-compose.stack.yml --env-file .env.stack up -d --build
+#
+# O backend é o único exposto ao host; o gtfs-service fica interno (rede do compose).
+
+services:
+  redis:
+    image: redis:7.4-alpine
+    command: redis-server --appendonly yes
+    volumes: [redis-data:/data]
+    healthcheck: { test: ["CMD", "redis-cli", "ping"], interval: 10s, timeout: 3s, retries: 5 }
+    mem_limit: 256m
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${DB_NAME:-sppotracker}
+      POSTGRES_USER: ${DB_USER:-sppotracker}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?defina DB_PASSWORD no .env.stack}
+    volumes: [postgres-data:/var/lib/postgresql/data]
+    healthcheck: { test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-sppotracker}"], interval: 10s, timeout: 3s, retries: 5 }
+    mem_limit: 512m
+    restart: unless-stopped
+
+  # Fonte de itinerário (shapes do GTFS da SMTR via BigQuery). Interno, sem porta pública.
+  sppo-gtfs-service:
+    build:
+      context: ${GTFS_SERVICE_PATH:-../sppo-gtfs-service}
+      dockerfile: Dockerfile
+    environment:
+      # Vazio = BigQuery real; use "demo" para subir sem credenciais (loader de amostra).
+      SPRING_PROFILES_ACTIVE: ${GTFS_PROFILE:-}
+      GCP_PROJECT_ID: ${GCP_PROJECT_ID:-}
+      GOOGLE_APPLICATION_CREDENTIALS: /secrets/gcp-sa.json
+      GTFS_VIAGEM_TABLE: ${GTFS_VIAGEM_TABLE:-rj-smtr.planejamento.viagem_planejada_dia}
+      GTFS_SHAPES_TABLE: ${GTFS_SHAPES_TABLE:-rj-smtr.planejamento.shapes_geom}
+      BIGQUERY_LOCATION: ${BIGQUERY_LOCATION:-US}
+      GTFS_API_KEY: ${GTFS_API_KEY:-}
+      GTFS_ADMIN_KEY: ${GTFS_ADMIN_KEY:-}
+    volumes:
+      # Diretório de segredos (crie ./secrets e coloque gcp-sa.json). Montado read-only.
+      - ./secrets:/secrets:ro
+    mem_limit: 1g
+    restart: unless-stopped
+
+  sppo-tracker-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      redis: { condition: service_healthy }
+      postgres: { condition: service_healthy }
+      sppo-gtfs-service: { condition: service_started }
+    ports: ["${SERVER_PORT:-8090}:8080"]
+    environment:
+      REDIS_HOST: redis
+      DB_HOST: postgres
+      DB_NAME: ${DB_NAME:-sppotracker}
+      DB_USER: ${DB_USER:-sppotracker}
+      DB_PASSWORD: ${DB_PASSWORD:?defina DB_PASSWORD no .env.stack}
+      GPS_POLLING_ENABLED: ${GPS_POLLING_ENABLED:-true}
+      # Liga a aderência de rota / OUT_OF_ROUTE / máquina de desvio contra o gtfs-service interno.
+      ROUTE_SHAPE_SOURCE: ${ROUTE_SHAPE_SOURCE:-gtfs-service}
+      SPPO_GTFS_BASE_URL: http://sppo-gtfs-service:8080
+      SPPO_GTFS_API_KEY: ${GTFS_API_KEY:-}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health | grep -q '\"status\":\"UP\"'"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
+    mem_limit: 1g
+    restart: unless-stopped
+
+volumes:
+  redis-data:
+  postgres-data:

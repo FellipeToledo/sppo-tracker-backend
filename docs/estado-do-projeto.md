@@ -144,7 +144,11 @@ polígonos de garagem. Por isso ficaram fora:
 3. ~~**Deploy** na VM Oracle Cloud (docker compose).~~ **Artefatos prontos:**
    `Dockerfile`, `docker-compose.yml`, `docker-compose.oracle.yml`, `.env.example`
    e o guia **`docs/deploy-oracle-cloud.md`** (inclui os dois firewalls e HTTPS
-   opcional via Caddy). Falta só provisionar a VM e rodar.
+   opcional via Caddy). **Stack unificado** (backend + `sppo-gtfs-service` + Redis +
+   Postgres) provedor-agnóstico: **`docker-compose.stack.yml`** + `.env.stack.example`
+   + guia **`docs/deploy-stack.md`** (espera os dois repos clonados lado a lado; segredos
+   em `secrets/`, fora do git). Falta só provisionar o host (Oracle bloqueado no signup;
+   alternativas avaliadas: Contabo/Hetzner/Fly.io).
 4. ~~**Fonte de shapes** para destravar OUT_OF_ROUTE.~~ **Feito (fatia A)** — ver §8.
    Falta destravar **§5 (máquina de desvio)** reusando a mesma geometria, e a
    **geofence de garagem**.
