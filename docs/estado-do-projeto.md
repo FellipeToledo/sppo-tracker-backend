@@ -123,6 +123,15 @@ polígonos de garagem. Por isso ficaram fora:
    `docs/regras-de-negocio.md` §6. *Manutenção:* atualizar `companies.json`
    conforme novos prefixos entrem em operação (o consórcio nunca fica sem rótulo).
 
+4. **[ENDEREÇADO] Content-Type do feed da SMTR.** No primeiro deploy real descobriu-se
+   que a API `dados.mobilidade.rio/gps/sppo` responde **JSON válido rotulado como
+   `text/html`** (e, sob carga, devolve página HTML de erro *"Service Unavailable"* com
+   HTTP 200). O `WebClient` recusava por content-type → **todo** ciclo falhava (cooldown).
+   Corrigido no `DadosMobilidadeRioGpsProvider`: o corpo é lido como **texto** e
+   desserializado como JSON independentemente do content-type; página HTML de erro vira
+   **falha transitória** (re-tentada). ⚠️ O feed é **instável** por conta da SMTR — quando
+   está fora, o mapa fica vazio até a fonte voltar (não é bug do backend).
+
 ## 6. Convenções seguidas (para manter na próxima sessão)
 
 - **TDD:** teste que falha primeiro → implementar → `mvn test`.
