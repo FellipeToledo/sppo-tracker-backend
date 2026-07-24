@@ -1,5 +1,6 @@
 package com.fajtech.sppotracker.domain.vehicle;
 
+import com.fajtech.sppotracker.domain.route.RouteAdherenceEvaluator;
 import com.fajtech.sppotracker.domain.route.RouteGeometrySource;
 import com.fajtech.sppotracker.domain.route.RoutePath;
 import org.junit.jupiter.api.Test;
@@ -37,7 +38,7 @@ class OutOfRouteRuleTest {
     }
 
     private static OutOfRouteRule ruleWith(RouteGeometrySource source) {
-        return new OutOfRouteRule(source, CORRIDOR, FALLBACK);
+        return new OutOfRouteRule(new RouteAdherenceEvaluator(source, CORRIDOR, FALLBACK));
     }
 
     @Test

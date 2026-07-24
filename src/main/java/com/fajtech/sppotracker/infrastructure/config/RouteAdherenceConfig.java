@@ -2,6 +2,7 @@ package com.fajtech.sppotracker.infrastructure.config;
 
 import com.fajtech.sppotracker.application.port.out.ResolveRouteShapesPort;
 import com.fajtech.sppotracker.application.route.RouteGeometryCache;
+import com.fajtech.sppotracker.domain.route.RouteAdherenceEvaluator;
 import com.fajtech.sppotracker.domain.vehicle.OutOfRouteRule;
 import com.fajtech.sppotracker.infrastructure.adapter.out.gtfs.SppoGtfsShapeProvider;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -60,9 +61,14 @@ public class RouteAdherenceConfig {
     }
 
     @Bean
-    public OutOfRouteRule outOfRouteRule(RouteGeometryCache routeGeometryCache,
-                                         RouteAdherenceProperties properties) {
-        return new OutOfRouteRule(routeGeometryCache,
+    public RouteAdherenceEvaluator routeAdherenceEvaluator(RouteGeometryCache routeGeometryCache,
+                                                           RouteAdherenceProperties properties) {
+        return new RouteAdherenceEvaluator(routeGeometryCache,
                 properties.corridorMeters(), properties.fallbackDistanceThresholdMeters());
+    }
+
+    @Bean
+    public OutOfRouteRule outOfRouteRule(RouteAdherenceEvaluator routeAdherenceEvaluator) {
+        return new OutOfRouteRule(routeAdherenceEvaluator);
     }
 }
