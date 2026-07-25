@@ -4,12 +4,14 @@ import com.fajtech.sppotracker.application.port.out.DeduplicationPort;
 import com.fajtech.sppotracker.domain.vehicle.Coordinates;
 import com.fajtech.sppotracker.domain.vehicle.PositionSource;
 import com.fajtech.sppotracker.domain.vehicle.VehiclePosition;
+import com.fajtech.sppotracker.infrastructure.adapter.out.persistence.RouteDeviationEventRepository;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -44,6 +46,11 @@ class RedisDeduplicationStoreIntegrationTest {
 
     @Autowired
     private StringRedisTemplate redisTemplate;
+
+    // JPA está excluída neste IT (só Redis); mocka o repositório do histórico de desvios
+    // para o contexto completo carregar (o adapter de leitura depende dele).
+    @MockitoBean
+    private RouteDeviationEventRepository routeDeviationEventRepository;
 
     private static VehiclePosition position() {
         Instant ts = Instant.ofEpochMilli(1690000000000L);
