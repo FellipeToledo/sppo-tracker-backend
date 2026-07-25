@@ -228,12 +228,25 @@ que não estão no planejamento**: `001`, `1`, `3`, `441`, `856` (10 veículos) 
 `viagem_planejada_dia` não tem; **deixado sem resolver de propósito** — `SV` costuma ser
 *variante* de itinerário, e casar com os shapes de `2802` produziria aderência falsa).
 
-⚠️ **Cuidado ao ler `gps.route.shape.resolve{result=empty}`:** o contador é cumulativo e
-a corrida de arranque infla ele. No rebuild de 2026-07-25, backend e gtfs subiram juntos
-e o índice do gtfs leva ~21 s para montar — o primeiro minuto gerou **285 `empty`** e só
-3 `shapes`. O TTL curto de vazio (5 min) curou: 21 minutos depois, **353 `shapes`** contra
-324 `empty`, com taxa em regime de +8 `shapes` / +9 `empty` por ~5 min. Se `shapes` está
-crescendo, está convergindo; olhe a **taxa**, não o total.
+**Corrida de arranque: CORRIGIDA.** O `gtfs-service` carregava o índice em
+`ApplicationReadyEvent` — exatamente quando o Boot marca readiness como
+*accepting traffic* —, e o compose só esperava `service_started`. Resultado: o backend
+subia junto e resolvia a frota inteira contra índice vazio pelos ~20 s da carga do
+BigQuery, cacheando esses vazios (**285 resoluções vazias no primeiro minuto** contra 3
+com shape, medido em 2026-07-25). O TTL curto de vazio curava em 5 min, mas o contador
+cumulativo ficava sujo para sempre. Três mudanças fecharam isso:
+
+1. carga passou para **`ApplicationStartedEvent`** (roda *antes* do readiness virar);
+2. healthcheck do container aponta para **`/actuator/health/readiness`**, não
+   `/actuator/health` (que fica UP assim que o Spring sobe);
+3. backend passou a depender de **`service_healthy`** do gtfs, não `service_started`.
+
+Tem teste guardando a inversão (`IndexReloadRunnerTest`), porque voltar o listener para
+`ApplicationReadyEvent` reabre a corrida sem quebrar nada visível.
+
+⚠️ Ao ler `gps.route.shape.resolve{result=empty}`, olhe a **taxa**, não o total: o
+contador é cumulativo e um único arranque ruim (ou uma janela sem o gtfs no ar) fica
+lá para sempre.
 
 **Débito/known-gaps desta fatia:**
 - Cache por **TTL** (6h). O contrato do serviço oferece `ETag`/`304` + `feedVersion.id`;
