@@ -21,10 +21,14 @@ import java.util.Objects;
  * <p><b>Borda conta como dentro</b> (decisão explícita): o ray casting é indefinido
  * exatamente na aresta, e para garagem o conservador é classificar dentro.
  *
- * @param ring   anel fechado (primeiro ponto == último); {@link #of} fecha se preciso
- * @param bounds derivada do anel — o valor passado ao construtor é ignorado por design
+ * @param address      endereço, opcional — apenas descritivo (popup/endpoint §7.1);
+ *                     nenhuma regra depende dele
+ * @param neighborhood bairro, opcional — idem
+ * @param ring         anel fechado (primeiro ponto == último); {@link #of} fecha se preciso
+ * @param bounds       derivada do anel — o valor passado ao construtor é ignorado por design
  */
-public record GarageArea(String id, String name, List<Coordinates> ring, BoundingBox bounds) {
+public record GarageArea(String id, String name, String address, String neighborhood,
+                         List<Coordinates> ring, BoundingBox bounds) {
 
     /** Tolerância em graus (~0,1 mm) para considerar o ponto sobre a aresta. */
     private static final double ON_EDGE_EPSILON = 1e-9;
@@ -41,11 +45,23 @@ public record GarageArea(String id, String name, List<Coordinates> ring, Boundin
         bounds = computeBounds(ring);
         id = id.trim();
         name = name.trim();
+        address = blankToNull(address);
+        neighborhood = blankToNull(neighborhood);
     }
 
     /** Cria a área fechando o anel (se preciso) e derivando a bounding box. */
     public static GarageArea of(String id, String name, List<Coordinates> ring) {
-        return new GarageArea(id, name, ring, null);
+        return new GarageArea(id, name, null, null, ring, null);
+    }
+
+    /** Idem, com os campos descritivos do dataset (endereço e bairro). */
+    public static GarageArea of(String id, String name, String address, String neighborhood,
+                                List<Coordinates> ring) {
+        return new GarageArea(id, name, address, neighborhood, ring, null);
+    }
+
+    private static String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     private static List<Coordinates> closed(List<Coordinates> ring) {

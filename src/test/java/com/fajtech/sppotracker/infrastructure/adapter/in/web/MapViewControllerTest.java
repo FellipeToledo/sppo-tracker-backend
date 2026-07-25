@@ -5,7 +5,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.model;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.view;
@@ -22,5 +24,16 @@ class MapViewControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(view().name("map"))
                 .andExpect(model().attributeExists("reconcileSeconds"));
+    }
+
+    @Test
+    void shouldWireTheGarageLayerIntoTheView() throws Exception {
+        // Guarda de regressão do template: o mapa precisa do toggle, do pane próprio
+        // (para o polígono não cobrir o marcador) e da carga do GeoJSON (§4.3, §7.1).
+        mockMvc.perform(get("/"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("id=\"garages\"")))
+                .andExpect(content().string(containsString("createPane('garages')")))
+                .andExpect(content().string(containsString("/api/v1/garages")));
     }
 }

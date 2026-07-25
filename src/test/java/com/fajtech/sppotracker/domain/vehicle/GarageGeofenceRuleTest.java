@@ -1,6 +1,7 @@
 package com.fajtech.sppotracker.domain.vehicle;
 
 import com.fajtech.sppotracker.domain.geofence.GarageArea;
+import com.fajtech.sppotracker.domain.geofence.GarageLocator;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -26,6 +27,10 @@ class GarageGeofenceRuleTest {
                 at(lat + 0.01, lon)));
     }
 
+    private static GarageGeofenceRule ruleWith(GarageArea... areas) {
+        return new GarageGeofenceRule(new GarageLocator(List.of(areas)));
+    }
+
     private static VehiclePosition positionAt(String serviceCode, Coordinates coordinates) {
         return VehiclePosition.builder()
                 .vehicleId("A1001")
@@ -40,7 +45,7 @@ class GarageGeofenceRuleTest {
 
     @Test
     void shouldTagWhenPositionIsInsideAGarage() {
-        GarageGeofenceRule rule = new GarageGeofenceRule(List.of(garage("g1", -22.90, -43.20)));
+        GarageGeofenceRule rule = ruleWith(garage("g1", -22.90, -43.20));
 
         var tags = rule.evaluate(positionAt("100", at(-22.895, -43.195)), NOW);
 
@@ -51,7 +56,7 @@ class GarageGeofenceRuleTest {
     void shouldTagRegardlessOfServiceCode() {
         // O valor da regra: veículo com código de serviço operacional, mas fisicamente
         // dentro do pátio, também é IN_GARAGE (§4.3).
-        GarageGeofenceRule rule = new GarageGeofenceRule(List.of(garage("g1", -22.90, -43.20)));
+        GarageGeofenceRule rule = ruleWith(garage("g1", -22.90, -43.20));
 
         assertThat(rule.evaluate(positionAt("483", at(-22.895, -43.195)), NOW))
                 .containsExactly(ClassificationTag.GARAGE_GEOFENCE);
@@ -59,9 +64,9 @@ class GarageGeofenceRuleTest {
 
     @Test
     void shouldNotTagWhenPositionIsOutsideEveryGarage() {
-        GarageGeofenceRule rule = new GarageGeofenceRule(List.of(
+        GarageGeofenceRule rule = ruleWith(
                 garage("g1", -22.90, -43.20),
-                garage("g2", -22.85, -43.30)));
+                garage("g2", -22.85, -43.30));
 
         var tags = rule.evaluate(positionAt("100", at(-22.92, -43.25)), NOW);
 
@@ -70,9 +75,9 @@ class GarageGeofenceRuleTest {
 
     @Test
     void shouldMatchAnyGarageInTheList() {
-        GarageGeofenceRule rule = new GarageGeofenceRule(List.of(
+        GarageGeofenceRule rule = ruleWith(
                 garage("g1", -22.90, -43.20),
-                garage("g2", -22.85, -43.30)));
+                garage("g2", -22.85, -43.30));
 
         assertThat(rule.evaluate(positionAt("100", at(-22.845, -43.295)), NOW))
                 .containsExactly(ClassificationTag.GARAGE_GEOFENCE);
@@ -80,7 +85,7 @@ class GarageGeofenceRuleTest {
 
     @Test
     void shouldStayNeutralWithoutAnyGarageLoaded() {
-        GarageGeofenceRule rule = new GarageGeofenceRule(List.of());
+        GarageGeofenceRule rule = ruleWith();
 
         assertThat(rule.evaluate(positionAt("100", at(-22.895, -43.195)), NOW)).isEmpty();
     }
@@ -95,7 +100,7 @@ class GarageGeofenceRuleTest {
                         BigDecimal.valueOf(-23.10), BigDecimal.valueOf(-22.70),
                         BigDecimal.valueOf(-43.80), BigDecimal.valueOf(-43.05))),
                 new GarageServiceCodeRule(),
-                new GarageGeofenceRule(List.of(garage("g1", -22.90, -43.20))),
+                ruleWith(garage("g1", -22.90, -43.20)),
                 new SuspiciousServiceCodeRule(),
                 new StalePositionRule(Duration.ofMinutes(5))));
 
@@ -112,9 +117,9 @@ class GarageGeofenceRuleTest {
     void shouldNotTagInvalidZeroZeroPosition() {
         // (0,0) é lixo do feed: nunca deve virar garagem. A INVALID vence de todo
         // jeito na precedência (§4.2), mas a regra não deve nem produzir a tag.
-        GarageGeofenceRule rule = new GarageGeofenceRule(List.of(
+        GarageGeofenceRule rule = ruleWith(
                 GarageArea.of("g0", "Ilha nula", List.of(
-                        at(-0.01, -0.01), at(-0.01, 0.01), at(0.01, 0.01), at(0.01, -0.01)))));
+                        at(-0.01, -0.01), at(-0.01, 0.01), at(0.01, 0.01), at(0.01, -0.01))));
 
         var tags = rule.evaluate(positionAt("100", at(0.0, 0.0)), NOW);
 

@@ -1,9 +1,8 @@
 package com.fajtech.sppotracker.domain.vehicle;
 
-import com.fajtech.sppotracker.domain.geofence.GarageArea;
+import com.fajtech.sppotracker.domain.geofence.GarageLocator;
 
 import java.time.Instant;
-import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
@@ -20,26 +19,23 @@ import java.util.Set;
  * <p>Sem polígonos carregados a regra é <b>neutra</b> (mesmo contrato defensivo da
  * {@link OutOfRouteRule}): nunca derruba a classificação por falta de dado.
  * Coordenada (0,0) — lixo do feed — nunca produz a tag.
+ *
+ * <p>A decisão de pertinência fica toda no {@link GarageLocator}, que a borda
+ * REST/WebSocket também usa para expor o <i>nome</i> da garagem — uma única fonte,
+ * para tag e nome nunca discordarem.
  */
 public final class GarageGeofenceRule implements ClassificationRule {
 
-    private final List<GarageArea> garages;
+    private final GarageLocator locator;
 
-    public GarageGeofenceRule(List<GarageArea> garages) {
-        this.garages = List.copyOf(Objects.requireNonNull(garages, "garages"));
+    public GarageGeofenceRule(GarageLocator locator) {
+        this.locator = Objects.requireNonNull(locator, "locator");
     }
 
     @Override
     public Set<ClassificationTag> evaluate(VehiclePosition position, Instant now) {
-        Coordinates coordinates = position.coordinates();
-        if (garages.isEmpty() || coordinates.isZeroZero()) {
-            return Set.of();
-        }
-        for (GarageArea garage : garages) {
-            if (garage.contains(coordinates)) {
-                return Set.of(ClassificationTag.GARAGE_GEOFENCE);
-            }
-        }
-        return Set.of();
+        return locator.locate(position.coordinates()).isPresent()
+                ? Set.of(ClassificationTag.GARAGE_GEOFENCE)
+                : Set.of();
     }
 }

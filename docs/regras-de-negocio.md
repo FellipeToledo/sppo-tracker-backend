@@ -274,12 +274,16 @@ empresas conhecidas, cada uma anotada com o consórcio (`consortiumCode`,
 | GET | `/api/v1/gps-polling/status` | status do último ciclo de polling | implementado |
 | GET | `/api/v1/operators` | de-para de operadoras | implementado |
 | GET | `/api/v1/route-deviations` | histórico de desvios; filtros: `vehicleId`, `serviceCode`, `type`, `severity`, `limit` | implementado |
-| GET | `/api/v1/garages` | lista de garagens (geofences) | **planejado** (depende dos polígonos, §4.3) |
+| GET | `/api/v1/garages` | geofences de garagem em **GeoJSON** (`FeatureCollection`; `properties`: id, name, address, neighborhood, pointCount) | implementado |
 | GET | `/api/v1/shapes/{shapeId}` | geometria do shape (quando fonte disponível) | **planejado** |
 | GET | `/api/v1/shapes/{shapeId}/corridor` | corredor (buffer) do shape | **planejado** |
 
 Além da API, `GET /` serve o **mapa de acompanhamento** (view Thymeleaf + Leaflet)
-alimentado por WebSocket.
+alimentado por WebSocket, com camada de garagens ligável.
+
+O payload de posição (REST e WebSocket usam **o mesmo DTO**) traz `garageName` quando a
+posição caiu numa geofence de garagem — `null` fora de garagem e também quando o
+`IN_GARAGE` veio apenas do código de serviço, que não diz em qual pátio o veículo está.
 
 ### 7.2 WebSocket / STOMP
 - Endpoint: `/ws`.

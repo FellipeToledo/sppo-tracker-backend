@@ -28,12 +28,12 @@ scheduler → readiness → cooldown → janela [now-90s, now] → fetch (provid
   `spring-boot-starter-webmvc-test` (o `@WebMvcTest` mudou para
   `org.springframework.boot.webmvc.test.autoconfigure`). Annotations Jackson
   permanecem em `com.fasterxml.jackson.annotation`.
-- **Testes:** `mvn --batch-mode test` → **199 testes, 0 falhas** (todos herméticos:
+- **Testes:** `mvn --batch-mode test` → **236 testes, 0 falhas** (todos herméticos:
   sem Redis/Postgres/rede reais — usam mocks, `SimpleMeterRegistry`, MockWebServer,
   `@WebMvcTest`). Os de integração (Testcontainers) rodam no `mvn verify` / CI.
-- **Estado do git (2026-07-25):** tudo entregue está em **`main`** (PR #11 mergeado,
-  fatias A/B/C + stack de deploy); nenhum PR aberto; branches mergeadas removidas.
-  A próxima feature (**geofence de garagem**) começa em branch nova a partir de `main`.
+- **Estado do git (2026-07-25):** `main` tem as fatias A/B/C + stack de deploy (PR #11
+  mergeado) e a higiene pré-feature. A **geofence de garagem** (§10) está na branch
+  `feat/garage-geofence`, pronta para PR.
 - **Repo irmão:** **`sppo-gtfs-service`** (fonte da verdade da geometria, BigQuery/GTFS
   da SMTR) — também em `main`, 34 testes verdes. O stack unificado espera os dois
   repos clonados lado a lado (`docs/deploy-stack.md`).
@@ -60,8 +60,10 @@ scheduler → readiness → cooldown → janela [now-90s, now] → fetch (provid
   `vehicleId`): carga inicial + reconcile periódico pelo REST, updates ao vivo pelo WS.
   Colorido por status, filtro client-side por linha/status, indicador de conexão.
 - `GET /api/v1/vehicle-positions/current?serviceCode=&routeId=&classificationStatus=`
+  (traz `garageName` quando a geofence de garagem casou — §10)
 - `GET /api/v1/gps-polling/status` (204 se nenhum ciclo rodou)
 - `GET /api/v1/operators`
+- `GET /api/v1/garages` — geofences de garagem em **GeoJSON** (§10)
 - `GET /api/v1/route-deviations?vehicleId=&serviceCode=&type=&severity=&limit=` (histórico §5)
 - WebSocket STOMP: `/ws` → assinar `/topic/vehicle-positions`
   (e `/service/{serviceCode}`, `/route/{routeId}`); `/topic/route-deviations`
@@ -90,15 +92,16 @@ polígonos de garagem. Por isso ficaram fora:
   ligado via `sppo-gtfs-service` (repo separado, BigQuery/GTFS da SMTR). Fica
   **desligado por default** (`ROUTE_SHAPE_SOURCE=disabled`); com `gtfs-service`,
   a `OutOfRouteRule` entra no classificador. Detalhes na §8.
-- **Regra `GARAGE_GEOFENCE`** — precisa de polígonos GeoJSON de garagem
-  (empacotados). A tag já existe; `IN_GARAGE` hoje só é atingido por código de
-  serviço. ⏭️ **É a próxima feature** — ver §10.
-- **Endpoints §7.1 não implementados:** `/api/v1/garages` (sai com a geofence),
-  `/api/v1/shapes/{id}`, `/api/v1/shapes/{id}/corridor` (expor a geometria já
-  resolvida do `gtfs-service`).
+- ~~**Regra `GARAGE_GEOFENCE`** — precisa de polígonos GeoJSON de garagem.~~
+  **FEITA (fatia D — ver §10):** polígonos oficiais do data.rio empacotados, regra
+  ligada por default e validada em runtime. `IN_GARAGE` deixou de depender só do
+  código de serviço.
+- **Endpoints §7.1 não implementados:** `/api/v1/shapes/{id}` e
+  `/api/v1/shapes/{id}/corridor` (expor a geometria já resolvida do `gtfs-service`).
+  `/api/v1/garages` **saiu** com a fatia D.
 
-**OUT_OF_ROUTE e §5 já estão destravados** pelo `sppo-gtfs-service` (§8/§9). O que
-resta sem fonte de dados é a **geofence de garagem** (polígonos) — §10.
+**Nada mais está bloqueado por falta de dado.** OUT_OF_ROUTE e §5 vêm do
+`sppo-gtfs-service` (§8/§9); a geofence de garagem veio do data.rio (§10).
 
 ## 5. DÉBITO TÉCNICO
 
@@ -268,8 +271,8 @@ nenhum bean é criado — comportamento inalterado.
 ## 10. Fatia D — geofence de garagem (`GARAGE_GEOFENCE`, §4.3)
 
 Regra de garagem por **localização**, não só por código de serviço: pega o ônibus
-recolhido que continua transmitindo linha operacional. **Fatias 1–4 entregues**
-(mecanismo completo e ligado); faltam o endpoint e o mapa.
+recolhido que continua transmitindo linha operacional. **Fatias 1–6 entregues e
+validadas em runtime contra o feed real** — ver os números no fim desta seção.
 
 ### Fonte dos polígonos
 
@@ -305,8 +308,10 @@ código de serviço. Reavaliar quando houver uma camada mais nova.
 **Flag / default:** `GPS_GARAGE_GEOFENCE_ENABLED` (default **true** — o dado é o lote
 oficial, e a regra só *acrescenta* precisão ao `IN_GARAGE` que já vinha do código de
 serviço). `GPS_GARAGE_GEOFENCE_RESOURCE` aceita `file:/...`, então dá para atualizar as
-garagens num deploy montando o arquivo, **sem rebuild**. Com `enabled=false` nenhum bean
-é criado e o comportamento volta a ser o anterior.
+garagens num deploy montando o arquivo, **sem rebuild**. Com `enabled=false` os beans
+existem mas **nenhum polígono é carregado**: a regra fica neutra (classificação idêntica
+à de antes da fatia) e `GET /api/v1/garages` devolve coleção vazia — assim a borda REST
+e o publisher não precisam tratar bean opcional.
 
 **Testes:** 23 novos (total do repo: **223**, verdes). `GarageAreaTest` cobre dentro,
 fora, **borda**, vértice, pré-filtro de bbox, **concavidade em L**, anel aberto e anel
@@ -316,10 +321,54 @@ integração das regras reais (`serviceCode` operacional dentro do pátio ⇒ `I
 **arquivo real** (37 áreas, ponto conhecido dentro da Braso Lisboa, Copacabana fora,
 ordem lon/lat, `MultiPolygon`, *feature* inválida, fail-fast).
 
-### Falta (fatias 5–6)
+### Fatias 5–6 — endpoint, mapa e rótulo na posição
 
-- `GET /api/v1/garages` (§7.1) devolvendo nome + geometria, e destaque no mapa.
-- Expor o nome da garagem na resposta REST/WebSocket da posição (hoje só a tag).
-- Métrica por garagem, se houver necessidade operacional.
-- Conferir no mapa antes de considerar a regra calibrada — e revisitar os 14 pontos de
-  parada sem cobertura oficial.
+- **`GET /api/v1/garages`** (§7.1) — **GeoJSON `FeatureCollection`** (RFC 7946), não um
+  formato próprio: o consumidor natural é mapa (`L.geoJSON`, QGIS) e o padrão fixa a
+  ordem `[lon, lat]`, origem clássica de bug em polígono. `properties` traz
+  `id`/`name`/`address`/`neighborhood`/`pointCount`. É também o jeito de auditar, em
+  produção, exatamente quais polígonos estão valendo.
+- **Mapa (`GET /`)** — camada de garagens com toggle "Mostrar garagens" (ligada por
+  default) e popup com operador/endereço/bairro. Os polígonos ficam num **pane próprio
+  com `zIndex` 350**, abaixo do `overlayPane` (400), para nunca cobrir os marcadores de
+  veículo — independentemente da ordem em que os `fetch` terminam.
+- **`garageName` no payload da posição** (REST **e** WebSocket, mesmo DTO): preenchido
+  **só quando a tag `GARAGE_GEOFENCE` está presente**; `IN_GARAGE` vindo apenas do código
+  de serviço não afirma em *qual* pátio o veículo está — e evita varrer polígonos para a
+  frota inteira. O popup do veículo mostra a linha "Garagem" quando existe.
+- **`GarageLocator`** (domínio) passou a ser a **lógica única** de pertinência, usada pela
+  regra e pela borda — mesmo motivo do `RouteAdherenceEvaluator` único: se as duas
+  respostas divergirem, aparece veículo "em garagem" sem garagem.
+
+**Validação em runtime (2026-07-25, feed real da SMTR, `mvn spring-boot:run`):**
+
+```
+Loaded garage geofences. count=37
+polling: SUCCESS, 1773 posições recebidas
+snapshot: 1730 veículos → 1583 IN_OPERATION, 135 IN_GARAGE, 8 SUSPICIOUS, 3 OUT_OF_MUNICIPALITY, 1 STALE
+```
+
+- **132** posições com a tag `GARAGE_GEOFENCE`, **todas** com `garageName` preenchido.
+- **121** delas *não* seriam `IN_GARAGE` pelo código de serviço — é o ganho líquido da
+  fatia (~7% da frota); **97** dessas carregam **linha operacional numérica**, exatamente
+  o caso alvo (ônibus recolhido ainda transmitindo linha).
+- Precedência conferida no dado real: `B10080` com `linha=MANUTENCAO` recebeu
+  `GARAGE_GEOFENCE` **e** `SUSPICIOUS_SERVICE_CODE`, e resolveu como `IN_GARAGE` (§4.2).
+- Garagens mais cheias no instante: Transportes Paranapuan (35), Viação Redentor;
+  Transportes Futuro (20), Viação Pavunense (16), Viação Vila Real (11).
+
+**Testes:** **36 novos** no total da feature (repo: **236**, verdes; `mvn verify` inclui
+os 5 ITs Testcontainers). Além dos de domínio/adapter das fatias 1–4:
+`GarageControllerTest` (contrato GeoJSON, ordem lon/lat, anel fechado na resposta,
+coleção vazia com a geofence off, campos descritivos omitidos quando ausentes),
+`GarageServiceTest` (rótulo só com a tag da geofence) e `MapViewControllerTest`
+(guarda de regressão do template: toggle, pane e o fetch do GeoJSON).
+
+### Falta
+
+- Expor `garageName` também no histórico de desvio, se fizer sentido operacional.
+- Métrica por garagem (`gps.classifications{garage}` ou contador dedicado) — só se houver
+  necessidade; hoje o `GET /api/v1/garages` + filtro por status já respondem no mapa.
+- **Revisitar os 14 pontos de parada sem cobertura oficial** (a lacuna medida acima):
+  decidir se entram como polígonos desenhados à mão ou se ficam de fora.
+- Camada oficial mais nova, quando a SMTR publicar (a atual é de 2021).

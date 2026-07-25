@@ -86,15 +86,17 @@ public class GeoJsonGarageGeofenceAdapter implements GarageGeofencePort {
         if (name.isBlank()) {
             name = text(properties, "operador");
         }
+        String address = text(properties, "endereco");
+        String neighborhood = text(properties, "bairro");
         JsonNode coordinates = geometry.path("coordinates");
 
         if ("Polygon".equals(type)) {
-            return List.of(GarageArea.of(id, name, ring(coordinates.path(0))));
+            return List.of(GarageArea.of(id, name, address, neighborhood, ring(coordinates.path(0))));
         }
         if ("MultiPolygon".equals(type)) {
             List<GarageArea> areas = new ArrayList<>();
             for (int i = 0; i < coordinates.size(); i++) {
-                areas.add(GarageArea.of(id + "-" + (i + 1), name,
+                areas.add(GarageArea.of(id + "-" + (i + 1), name, address, neighborhood,
                         ring(coordinates.path(i).path(0))));
             }
             return areas;

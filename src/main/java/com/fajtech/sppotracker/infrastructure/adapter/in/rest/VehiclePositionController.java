@@ -1,5 +1,6 @@
 package com.fajtech.sppotracker.infrastructure.adapter.in.rest;
 
+import com.fajtech.sppotracker.application.port.in.GarageQueryUseCase;
 import com.fajtech.sppotracker.application.port.in.GetCurrentVehiclePositionsUseCase;
 import com.fajtech.sppotracker.application.port.in.OperatorQueryUseCase;
 import com.fajtech.sppotracker.application.query.VehiclePositionFilter;
@@ -24,10 +25,14 @@ public class VehiclePositionController {
 
     private final GetCurrentVehiclePositionsUseCase useCase;
     private final OperatorQueryUseCase operators;
+    private final GarageQueryUseCase garages;
 
-    public VehiclePositionController(GetCurrentVehiclePositionsUseCase useCase, OperatorQueryUseCase operators) {
+    public VehiclePositionController(GetCurrentVehiclePositionsUseCase useCase,
+                                     OperatorQueryUseCase operators,
+                                     GarageQueryUseCase garages) {
         this.useCase = useCase;
         this.operators = operators;
+        this.garages = garages;
     }
 
     @GetMapping("/current")
@@ -43,6 +48,7 @@ public class VehiclePositionController {
 
     private VehiclePositionResponse toResponse(ClassifiedVehiclePosition classified) {
         VehicleOperator operator = operators.resolve(classified.position().vehicleId());
-        return VehiclePositionResponse.from(classified, operator.consortiumName(), operator.companyName());
+        return VehiclePositionResponse.from(classified, operator.consortiumName(), operator.companyName(),
+                garages.garageNameFor(classified).orElse(null));
     }
 }

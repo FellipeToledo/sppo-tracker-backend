@@ -41,6 +41,11 @@
                    font-size: 12px; border-top: 1px solid #262c37; }
         .badge { font-size: 10px; padding: 1px 5px; border-radius: 4px; color: #111; font-weight: 600; }
         .dev-empty { opacity: .5; font-size: 12px; margin-top: 6px; }
+        .panel label.check { display: flex; align-items: center; gap: 6px; margin-top: 10px;
+                             opacity: .9; cursor: pointer; }
+        .panel label.check input { width: auto; }
+        .swatch { width: 12px; height: 12px; flex: 0 0 auto; border-radius: 2px;
+                  background: rgba(142, 68, 173, .35); border: 1px solid #8e44ad; }
     </style>
 </head>
 <body>
@@ -53,6 +58,7 @@
     <select id="status">
         <option value="">Todos</option>
     </select>
+    <label class="check"><input type="checkbox" id="garages" checked/> Mostrar garagens</label>
     <div class="status-line" id="statusLine">Conectando…</div>
     <div class="legend" id="legend"></div>
     <div class="section-title">Desvios recentes</div>
@@ -94,6 +100,12 @@
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19, attribution: '© OpenStreetMap'
     }).addTo(map);
+    // Garagens num pane próprio abaixo do overlayPane (400): os polígonos nunca cobrem
+    // os marcadores de veículo, independente da ordem em que o fetch termina.
+    map.createPane('garages');
+    map.getPane('garages').style.zIndex = 350;
+    const garageLayer = L.layerGroup().addTo(map);
+
     const layer = L.layerGroup().addTo(map);
 
     // Estado local: dado por veículo + marcador reutilizável (escala p/ milhares).
@@ -106,6 +118,7 @@
     const serviceInput = document.getElementById('serviceCode');
     const conn = document.getElementById('conn');
     const devList = document.getElementById('devList');
+    const garageToggle = document.getElementById('garages');
 
     Object.keys(STATUS_COLORS).forEach(function (s) {
         const opt = document.createElement('option');
@@ -122,6 +135,11 @@
     devLegend.className = 'item';
     devLegend.innerHTML = '<span class="ring"></span> Em desvio de rota';
     legend.appendChild(devLegend);
+    // Legenda da geofence de garagem.
+    const garageLegend = document.createElement('div');
+    garageLegend.className = 'item';
+    garageLegend.innerHTML = '<span class="swatch"></span> Garagem (geofence)';
+    legend.appendChild(garageLegend);
 
     function ageSeconds(iso) {
         if (!iso) return null;
@@ -135,19 +153,58 @@
         });
     }
 
-    function popupHtml(v) {
-        const age = ageSeconds(v.positionTimestamp);
-        const rows = [
-            ['Veículo', v.vehicleId], ['Linha', v.serviceCode || '—'],
-            ['Status', STATUS_LABELS[v.classificationStatus] || v.classificationStatus],
-            ['Empresa', v.companyName || '—'], ['Consórcio', v.consortiumName || '—'],
-            ['Velocidade', v.speed != null ? v.speed + ' km/h' : '—'],
-            ['Idade', age != null ? age + ' s' : '—']
-        ];
+    function rowsHtml(rows) {
         return '<div class="popup">' + rows.map(function (r) {
             return '<div><b>' + esc(r[0]) + ':</b> ' + esc(r[1]) + '</div>';
         }).join('') + '</div>';
     }
+
+    function popupHtml(v) {
+        const age = ageSeconds(v.positionTimestamp);
+        const rows = [
+            ['Veículo', v.vehicleId], ['Linha', v.serviceCode || '—'],
+            ['Status', STATUS_LABELS[v.classificationStatus] || v.classificationStatus]
+        ];
+        // Só aparece quando a geofence casou (§4.3) — IN_GARAGE por código de serviço
+        // não diz em qual pátio o veículo está.
+        if (v.garageName) rows.push(['Garagem', v.garageName]);
+        rows.push(
+            ['Empresa', v.companyName || '—'], ['Consórcio', v.consortiumName || '—'],
+            ['Velocidade', v.speed != null ? v.speed + ' km/h' : '—'],
+            ['Idade', age != null ? age + ' s' : '—']);
+        return rowsHtml(rows);
+    }
+
+    // Polígonos de garagem: carga única do GeoJSON de /api/v1/garages (§7.1).
+    async function loadGarages() {
+        try {
+            const res = await fetch('/api/v1/garages', { headers: { 'Accept': 'application/json' } });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const collection = await res.json();
+            const count = (collection.features || []).length;
+            if (!count) return;
+            L.geoJSON(collection, {
+                pane: 'garages',
+                style: { color: '#8e44ad', weight: 1.5, fillColor: '#8e44ad', fillOpacity: 0.18 },
+                onEachFeature: function (feature, layerRef) {
+                    const p = feature.properties || {};
+                    layerRef.bindPopup(rowsHtml([
+                        ['Garagem', p.name || '—'],
+                        ['Endereço', p.address || '—'],
+                        ['Bairro', p.neighborhood || '—']
+                    ]));
+                }
+            }).addTo(garageLayer);
+        } catch (e) {
+            // Geofence desligada ou dataset vazio não é erro para o mapa.
+            console.warn('Falha ao carregar garagens:', e.message);
+        }
+    }
+
+    garageToggle.addEventListener('change', function () {
+        if (garageToggle.checked) garageLayer.addTo(map);
+        else map.removeLayer(garageLayer);
+    });
 
     function passesFilter(v) {
         const code = serviceInput.value.trim().toUpperCase();
@@ -305,6 +362,7 @@
 
     setConn('');
     reconcile();                 // carga inicial imediata das posições
+    loadGarages();               // geofences de garagem (carga única, dado estático)
     loadDeviationHistory();      // histórico de desvios + estado ativo
     stomp.activate();            // stream ao vivo (posições + desvios)
     setInterval(reconcile, Math.max(10, window.RECONCILE_SECONDS) * 1000);

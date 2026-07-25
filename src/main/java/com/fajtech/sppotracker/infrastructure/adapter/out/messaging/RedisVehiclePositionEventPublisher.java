@@ -1,5 +1,6 @@
 package com.fajtech.sppotracker.infrastructure.adapter.out.messaging;
 
+import com.fajtech.sppotracker.application.port.in.GarageQueryUseCase;
 import com.fajtech.sppotracker.application.port.in.OperatorQueryUseCase;
 import com.fajtech.sppotracker.application.port.out.PublishVehiclePositionEventPort;
 import com.fajtech.sppotracker.domain.operator.VehicleOperator;
@@ -24,12 +25,14 @@ public class RedisVehiclePositionEventPublisher implements PublishVehiclePositio
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
     private final OperatorQueryUseCase operators;
+    private final GarageQueryUseCase garages;
 
     public RedisVehiclePositionEventPublisher(StringRedisTemplate redisTemplate, ObjectMapper objectMapper,
-                                              OperatorQueryUseCase operators) {
+                                              OperatorQueryUseCase operators, GarageQueryUseCase garages) {
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
         this.operators = operators;
+        this.garages = garages;
     }
 
     @Override
@@ -38,7 +41,8 @@ public class RedisVehiclePositionEventPublisher implements PublishVehiclePositio
         String json;
         try {
             json = objectMapper.writeValueAsString(
-                    VehiclePositionResponse.from(event, operator.consortiumName(), operator.companyName()));
+                    VehiclePositionResponse.from(event, operator.consortiumName(), operator.companyName(),
+                            garages.garageNameFor(event).orElse(null)));
         } catch (JacksonException e) {
             throw new IllegalStateException("Falha ao serializar evento de posição do veículo "
                     + event.position().vehicleId(), e);

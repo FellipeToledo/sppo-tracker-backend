@@ -37,10 +37,17 @@ public record VehiclePositionResponse(
         boolean onRoute,
         List<ClassificationTag> tags,
         String consortiumName,
-        String companyName) {
+        String companyName,
+        String garageName) {
 
+    /**
+     * @param garageName nome da garagem quando a posição cai numa geofence (§4.3);
+     *                   {@code null} fora de garagem — inclusive quando o
+     *                   {@code IN_GARAGE} veio apenas do código de serviço
+     */
     public static VehiclePositionResponse from(ClassifiedVehiclePosition classified,
-                                               String consortiumName, String companyName) {
+                                               String consortiumName, String companyName,
+                                               String garageName) {
         VehiclePosition p = classified.position();
         PositionClassification c = classified.classification();
         return new VehiclePositionResponse(
@@ -66,6 +73,7 @@ public record VehiclePositionResponse(
                 c.onRoute(),
                 List.copyOf(c.tags()),
                 consortiumName,
-                companyName);
+                companyName,
+                garageName);
     }
 }
