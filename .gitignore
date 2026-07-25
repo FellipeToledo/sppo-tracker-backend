@@ -8,4 +8,6 @@ target/
 .env
 .env.*
 !.env.example
+!.env.stack.example
+secrets/
 src/main/resources/application-local.yml

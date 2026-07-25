@@ -26,6 +26,9 @@ public class RouteDeviationEventEntity {
     @Column(name = "vehicle_id", nullable = false)
     private String vehicleId;
 
+    @Column(name = "service_code")
+    private String serviceCode;
+
     @Column(name = "route_id")
     private String routeId;
 
@@ -58,6 +61,14 @@ public class RouteDeviationEventEntity {
 
     public void setVehicleId(String vehicleId) {
         this.vehicleId = vehicleId;
+    }
+
+    public String getServiceCode() {
+        return serviceCode;
+    }
+
+    public void setServiceCode(String serviceCode) {
+        this.serviceCode = serviceCode;
     }
 
     public String getRouteId() {

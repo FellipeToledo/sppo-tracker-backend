@@ -1,5 +1,12 @@
 # Kickoff — mensagem inicial para o agente (Antigravity)
 
+> ⚠️ **DOCUMENTO HISTÓRICO — não use como referência.** Foi o prompt de partida do
+> projeto (Spring Boot 3.5, repo vazio, roadmap das fatias 1–10). O roadmap abaixo
+> **já foi entregue** e a stack mudou (Spring Boot 4.1 / Jackson 3). Para o estado
+> atual use **`docs/estado-do-projeto.md`**; para as regras,
+> **`docs/regras-de-negocio.md`**; para convenções, **`CLAUDE.md`**.
+> Mantido apenas como registro da intenção original.
+
 Cole o bloco abaixo no agente da Antigravity para iniciar o projeto.
 
 ```text

@@ -50,6 +50,12 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
+        <!-- View server-side mínima (mapa de acompanhamento): página Thymeleaf que
+             consome os endpoints REST já existentes. Ver infrastructure/adapter/in/web. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-thymeleaf</artifactId>
+        </dependency>
         <!-- Auto-configuração do Flyway: no Spring Boot 4 saiu de
              spring-boot-autoconfigure para o módulo dedicado spring-boot-flyway.
              Sem ele, as migrações não rodam no boot. -->

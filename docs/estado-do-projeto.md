@@ -28,11 +28,15 @@ scheduler → readiness → cooldown → janela [now-90s, now] → fetch (provid
   `spring-boot-starter-webmvc-test` (o `@WebMvcTest` mudou para
   `org.springframework.boot.webmvc.test.autoconfigure`). Annotations Jackson
   permanecem em `com.fasterxml.jackson.annotation`.
-- **Testes:** `mvn --batch-mode test` → **130 testes, 0 falhas** (todos herméticos:
+- **Testes:** `mvn --batch-mode test` → **199 testes, 0 falhas** (todos herméticos:
   sem Redis/Postgres/rede reais — usam mocks, `SimpleMeterRegistry`, MockWebServer,
-  `@WebMvcTest`).
-- **Branch de trabalho:** `claude/sppo-tracker-setup-cd7vmo`. **Nenhum PR aberto**
-  ainda (abrir só quando desejado).
+  `@WebMvcTest`). Os de integração (Testcontainers) rodam no `mvn verify` / CI.
+- **Estado do git (2026-07-25):** tudo entregue está em **`main`** (PR #11 mergeado,
+  fatias A/B/C + stack de deploy); nenhum PR aberto; branches mergeadas removidas.
+  A próxima feature (**geofence de garagem**) começa em branch nova a partir de `main`.
+- **Repo irmão:** **`sppo-gtfs-service`** (fonte da verdade da geometria, BigQuery/GTFS
+  da SMTR) — também em `main`, 34 testes verdes. O stack unificado espera os dois
+  repos clonados lado a lado (`docs/deploy-stack.md`).
 
 ## 2. Roadmap — fatias concluídas (1–10)
 
@@ -51,18 +55,25 @@ scheduler → readiness → cooldown → janela [now-90s, now] → fetch (provid
 
 ## 3. Endpoints disponíveis
 
+- `GET /` — **mapa de acompanhamento** (view Thymeleaf + Leaflet), **tempo real via
+  WebSocket/STOMP** (`/ws` → `/topic/vehicle-positions`, marcadores reutilizados por
+  `vehicleId`): carga inicial + reconcile periódico pelo REST, updates ao vivo pelo WS.
+  Colorido por status, filtro client-side por linha/status, indicador de conexão.
 - `GET /api/v1/vehicle-positions/current?serviceCode=&routeId=&classificationStatus=`
 - `GET /api/v1/gps-polling/status` (204 se nenhum ciclo rodou)
 - `GET /api/v1/operators`
+- `GET /api/v1/route-deviations?vehicleId=&serviceCode=&type=&severity=&limit=` (histórico §5)
 - WebSocket STOMP: `/ws` → assinar `/topic/vehicle-positions`
-  (e `/service/{serviceCode}`, `/route/{routeId}`)
+  (e `/service/{serviceCode}`, `/route/{routeId}`); `/topic/route-deviations`
+  (e `/route/{routeId}`) para eventos de desvio (§9)
 - `GET /actuator/health`, `GET /actuator/prometheus`
 
 Métricas: `gps.polling.cycles{outcome}`, `gps.polling.cycle.duration`,
 `gps.polling.consecutive.failures`, `gps.ingestion.positions{result}`,
 `gps.classifications{status}`, `gps.position.age`,
 `gps.provider.requests{outcome}`, `gps.provider.request.duration`,
-`gps.provider.window.seconds`.
+`gps.provider.window.seconds`, `gps.route.deviations{type,severity}`,
+`gps.route.shape.resolve{result}`.
 
 ---
 
@@ -71,20 +82,23 @@ Métricas: `gps.polling.cycles{outcome}`, `gps.polling.cycle.duration`,
 O feed público da SMTR **não fornece** `routeId`/`shapeId`/sentido, nem shapes ou
 polígonos de garagem. Por isso ficaram fora:
 
-- **§5 — Máquina de estados de desvio de rota (C1 ALERT / C2 CONFIRMED / RETURN /
-  CANCELLED), severidade, sweep.** Depende de aderência dentro/fora do corredor
-  (geometria de shapes). **A persistência já está pronta** para receber os eventos
-  (`route_deviation_event`, entidade e repositório existem; falta o *escritor*).
-- **Regra `OUT_OF_ROUTE`** — sem produtor (§4.4 diz que fica desligada com o feed
-  público). A tag e o lugar na precedência/flags já existem no modelo.
+- ~~**§5 — Máquina de estados de desvio de rota.**~~ **FEITO (fatia B — ver §9).**
+  Máquina pura (ALERT/CONFIRMED/RETURN/CANCELLED + severidade + sweep), *escritor*
+  Postgres, publisher Redis→STOMP `/topic/route-deviations`. Desligada com a fonte
+  de shapes off (default).
+- ~~**Regra `OUT_OF_ROUTE`** — sem produtor.~~ **FEITO (fatia A):** produtor
+  ligado via `sppo-gtfs-service` (repo separado, BigQuery/GTFS da SMTR). Fica
+  **desligado por default** (`ROUTE_SHAPE_SOURCE=disabled`); com `gtfs-service`,
+  a `OutOfRouteRule` entra no classificador. Detalhes na §8.
 - **Regra `GARAGE_GEOFENCE`** — precisa de polígonos GeoJSON de garagem
   (empacotados). A tag já existe; `IN_GARAGE` hoje só é atingido por código de
-  serviço.
-- **Endpoints §7.1 não implementados:** `/api/v1/garages`,
-  `/api/v1/shapes/{id}`, `/api/v1/shapes/{id}/corridor` (dependem de geometria).
+  serviço. ⏭️ **É a próxima feature** — ver §10.
+- **Endpoints §7.1 não implementados:** `/api/v1/garages` (sai com a geofence),
+  `/api/v1/shapes/{id}`, `/api/v1/shapes/{id}/corridor` (expor a geometria já
+  resolvida do `gtfs-service`).
 
-**Para destravar §5/OUT_OF_ROUTE/geofence:** decidir a fonte de itinerário
-(GTFS/`shape-geom` próprio) — ver §10 e TODO de `docs/regras-de-negocio.md`.
+**OUT_OF_ROUTE e §5 já estão destravados** pelo `sppo-gtfs-service` (§8/§9). O que
+resta sem fonte de dados é a **geofence de garagem** (polígonos) — §10.
 
 ## 5. DÉBITO TÉCNICO
 
@@ -114,6 +128,25 @@ polígonos de garagem. Por isso ficaram fora:
    `docs/regras-de-negocio.md` §6. *Manutenção:* atualizar `companies.json`
    conforme novos prefixos entrem em operação (o consórcio nunca fica sem rótulo).
 
+4. **[ENDEREÇADO] Content-Type do feed da SMTR.** No primeiro deploy real descobriu-se
+   que a API `dados.mobilidade.rio/gps/sppo` responde **JSON válido rotulado como
+   `text/html`** (e, sob carga, devolve página HTML de erro *"Service Unavailable"* com
+   HTTP 200). O `WebClient` recusava por content-type → **todo** ciclo falhava (cooldown).
+   Corrigido no `DadosMobilidadeRioGpsProvider`: o corpo é lido como **texto** e
+   desserializado como JSON independentemente do content-type; página HTML de erro vira
+   **falha transitória** (re-tentada). ⚠️ O feed é **instável** por conta da SMTR — quando
+   está fora, o mapa fica vazio até a fonte voltar (não é bug do backend).
+
+5. **[ENDEREÇADO] Cache-vazio-preso da resolução de shapes.** Descoberto no deploy real:
+   enquanto o `sppo-gtfs-service` estava com índice `unloaded` (credencial ausente), ele
+   respondia `404` para **todas** as linhas; o backend cacheava esse "vazio" com o TTL longo
+   (6 h) e, mesmo após o gtfs voltar, seguia servindo vazio — só resolvendo após restart.
+   Corrigido: `RouteGeometryCache` agora usa um **TTL curto separado para resultados vazios**
+   (`gps.route.empty-cache-ttl`, default **5 min**), então um gtfs momentaneamente sem índice
+   não congela as linhas. *Companion opcional (outro repo):* o `sppo-gtfs-service` retornar
+   `503` (em vez de `404`) enquanto `unloaded`, para o backend tratar como falha transitória
+   (não-cacheável) — recomendado, mas o TTL curto já resolve do lado do backend.
+
 ## 6. Convenções seguidas (para manter na próxima sessão)
 
 - **TDD:** teste que falha primeiro → implementar → `mvn test`.
@@ -128,13 +161,144 @@ polígonos de garagem. Por isso ficaram fora:
 
 ## 7. Próximos passos sugeridos (ordem de valor/viabilidade)
 
-1. **Fechar débito técnico** (escolher (a) Testcontainers, (b) `contextLoads` leve,
-   ou (c) manter como TODO).
+0. ⏭️ **Geofence de garagem (`GARAGE_GEOFENCE`, §4.3)** — **próxima feature
+   escolhida**. Escopo e pré-requisitos na §10 deste documento.
+1. ~~**Fechar débito técnico**~~ **Feito** — ver §5 (contexto Spring + ITs
+   Testcontainers na CI).
 2. ~~**Popular `operators.json`** com dados reais.~~ **Feito** (de-para por
    consórcio, 1º caractere da ordem — ver §5, débito 3).
 3. ~~**Deploy** na VM Oracle Cloud (docker compose).~~ **Artefatos prontos:**
    `Dockerfile`, `docker-compose.yml`, `docker-compose.oracle.yml`, `.env.example`
    e o guia **`docs/deploy-oracle-cloud.md`** (inclui os dois firewalls e HTTPS
-   opcional via Caddy). Falta só provisionar a VM e rodar.
-4. **Fonte de shapes** (GTFS/shape-geom) para destravar §5 / OUT_OF_ROUTE / geofence.
-5. **CI** (GitHub Actions: build/test → imagem → deploy).
+   opcional via Caddy). **Stack unificado** (backend + `sppo-gtfs-service` + Redis +
+   Postgres) provedor-agnóstico: **`docker-compose.stack.yml`** + `.env.stack.example`
+   + guia **`docs/deploy-stack.md`** (espera os dois repos clonados lado a lado; segredos
+   em `secrets/`, fora do git). Falta só provisionar o host (Oracle bloqueado no signup;
+   alternativas avaliadas: Contabo/Hetzner/Fly.io).
+4. ~~**Fonte de shapes** para destravar OUT_OF_ROUTE.~~ **Feito (fatia A)** — ver §8;
+   ~~**§5 (máquina de desvio)**~~ **feita (fatia B)** — ver §9. Resta a
+   **geofence de garagem** (§10).
+5. **CI** — `mvn --batch-mode verify` (unitários + ITs Testcontainers) roda em push/PR
+   para `main` (`.github/workflows/ci.yml`), com Dependabot semanal (Maven + Actions).
+   Falta o passo de **imagem + deploy** (depende do host provisionado).
+
+---
+
+## 8. Fatia A — aderência de rota via `sppo-gtfs-service` (OUT_OF_ROUTE)
+
+Integração com o **`sppo-gtfs-service`** (microserviço separado, Java/Spring
+hexagonal, que serve shapes do GTFS da SMTR a partir do BigQuery). O backend passou
+a **produzir** a tag `OUT_OF_ROUTE`, testando cada posição contra o corredor dos
+shapes da linha (`serviceCode`).
+
+**Peças novas:**
+- **Domínio (`domain/route`):** `RoutePath` (polilinha + bbox + teste de corredor
+  com pré-filtro por bounding box), `Geo` (haversine + distância ponto→segmento),
+  `RouteGeometrySource` (porta pura, não-bloqueante), `LineCodeKey` (normalização
+  **idêntica** ao `LineCode` do serviço — trim/upper + strip de zeros à esquerda).
+  `OutOfRouteRule` (§4.4): fora do corredor de **todos** os shapes ⇒ tag; sem
+  geometria ⇒ neutra. A precedência segue fixa no `PositionClassifier`.
+- **Aplicação:** `ResolveRouteShapesPort` (out), `ResolvedShapes`, `RouteGeometryCache`
+  — cache assíncrono **bounded** e stale-while-revalidate: o hot path só lê o que já
+  está resolvido; a resolução (I/O) roda em executor de background; sob pico o excesso
+  é descartado e re-tentado (§4.4). Resultado **vazio** expira em TTL curto
+  (`GPS_ROUTE_SHAPE_EMPTY_CACHE_TTL`, 5 min) para não congelar a linha por 6 h quando o
+  gtfs-service está momentaneamente sem índice.
+- **Infra:** `SppoGtfsShapeProvider` (WebClient → `GET /api/v1/lines/{lineCode}/shapes`,
+  decodifica encoded polyline; 404/no_shapes ⇒ vazio autoritativo; falha ⇒ retry),
+  `EncodedPolyline` (decoder Google precisão 5), `RouteAdherenceConfig` +
+  `RouteAdherenceProperties` (`gps.route`) + `SppoGtfsClientProperties` (`gps.gtfs-service`).
+
+**Flag / default:** `ROUTE_SHAPE_SOURCE=disabled` por padrão — nenhum bean HTTP é
+criado e a regra não é montada (comportamento idêntico ao atual). Com
+`gtfs-service`, aponta-se `SPPO_GTFS_BASE_URL` (e `SPPO_GTFS_API_KEY` se houver).
+Métrica: `gps.route.shape.resolve{result=shapes|empty|failure}`.
+
+**Débito/known-gaps desta fatia:**
+- Cache por **TTL** (6h). O contrato do serviço oferece `ETag`/`304` + `feedVersion.id`;
+  a revalidação por ETag ainda **não** foi implementada (melhoria de eficiência, não
+  bloqueia). 
+- Sem endpoints §7.1 (`/shapes/{id}`, `/corridor`) — fatia C.
+- `sppo-gtfs-service` ainda não hospedado (Oracle a provisionar); rodar em `demo`
+  para testes ponta a ponta locais.
+
+---
+
+## 9. Fatia B — máquina de desvio de itinerário (§5)
+
+Detecção de episódios de desvio, **ortogonal à classificação** e **fora do hot path**.
+
+**B1 — núcleo puro (`domain/route`):**
+- `RouteAdherenceEvaluator` — lógica **única** dentro/fora **+ distância**, reusada pela
+  `OutOfRouteRule` e pela máquina (fecha o TODO §10 de unificação).
+- `RouteDeviationDetector` — máquina de estados por veículo: `ALERT` (N pontos fora) →
+  `CONFIRMED` (sustentado por tempo **ou** distância) → `RETURN`/`CANCELLED`; `sweep`
+  consolida veículos silenciosos. "Efetivamente fora" = fora **e** distância > margem
+  (§5.2). Enums, `DeviationSeverity` (§5.4), `VehicleDeviationState`, `DeviationConfig`,
+  `RouteDeviationEvent`, `DeviationOutcome`. Tudo coberto por teste.
+
+**B2 — wiring (fora do hot path):**
+- `RouteDeviationService` (aplicação) — cache de estado por veículo (TTL 6h, poda no
+  sweep), transições serializadas por `compute`, I/O de persistência/publicação fora do
+  lock. Alimentado pelo `RouteDeviationPositionSubscriber` (consome o canal Redis de
+  posições, mesmo payload do REST) — nada é adicionado ao pipeline de ingestão.
+- Saída: `JpaRouteDeviationEventWriter` → `route_deviation_event` (migração **V2** adiciona
+  `service_code`); `RedisRouteDeviationEventPublisher` → canal Redis → `RouteDeviationEventRelay`
+  → STOMP `/topic/route-deviations` [`/route/{routeId}`].
+- `RouteDeviationSweepScheduler` (`@Scheduled`, 30s). Config `gps.route.deviation.*`
+  (`RouteDeviationProperties`).
+
+**Flag / default:** gated por `gps.route.shape-source=gtfs-service` (depende de geometria)
+**e** `gps.route.deviation.enabled` (default true). Com a fonte **disabled** (default),
+nenhum bean é criado — comportamento inalterado.
+
+**Known-gaps desta fatia:**
+- ~~Sem endpoint REST de histórico.~~ **Feito:** `GET /api/v1/route-deviations`
+  (filtros vehicleId/serviceCode/type/severity/limit) + destaque no mapa (anel
+  vermelho para episódio aberto) e lista "Desvios recentes" (WS ao vivo + carga REST).
+- ~~Sem métrica de desvios.~~ **Feito:** `gps.route.deviations{type,severity}` (contador
+  Micrometer por evento emitido) em `/actuator/prometheus`.
+- Observação = posições **mudadas** (o stream publicado já é pós-dedup/mudança); posições
+  idênticas repetidas não contam como novos pontos.
+- ⚠️ Não exercitado com `shape-source=gtfs-service` em teste hermético (precisa de
+  Redis/JPA/WebClient) — validação vem da CI/integração ou do run local.
+
+---
+
+## 10. Próxima feature — geofence de garagem (`GARAGE_GEOFENCE`, §4.3)
+
+Terreno preparado; **nada implementado ainda**. O que já existe a favor:
+
+- A tag **`GARAGE_GEOFENCE` já existe** em `ClassificationTag` e a **precedência já
+  está pronta** no `PositionClassifier`: `IN_GARAGE || GARAGE_GEOFENCE` ⇒ status
+  `IN_GARAGE` (3º na ordem, §4.2). As flags §4.5 (`insideGarage`) também já cobrem.
+- Existe **padrão a copiar** para dado empacotado: `PackagedOperatorDirectory`
+  (+ `OperatorDirectoryPort`, `OperatorConfig`) carrega JSON de `resources/` no boot.
+- Existe **geometria pronta a reusar** em `domain/route/Geo` (haversine, distância
+  ponto→segmento) e o padrão de pré-filtro por bounding box em `RoutePath`.
+
+**Peças a criar (ordem sugerida, TDD):**
+
+1. `domain/vehicle/GaragePolygon` (ou `domain/geo/`): polígono imutável auto-validado
+   + **ponto-em-polígono** (ray casting) com **pré-filtro por bbox** — teste primeiro.
+2. `GarageGeofenceRule implements ClassificationRule` → devolve `GARAGE_GEOFENCE`
+   quando a coordenada cai em qualquer polígono; **neutra** sem polígonos carregados
+   (mesmo contrato defensivo da `OutOfRouteRule`).
+3. Porta `GarageDirectoryPort` (out) + `PackagedGarageDirectory` lendo
+   `resources/garages.geojson` (FeatureCollection de `Polygon`/`MultiPolygon`).
+4. Wiring em `ClassificationConfig` + propriedades `gps.geofence.garages.*`
+   (`enabled`, caminho do arquivo) — **desligado por default** enquanto não houver
+   polígonos reais, para não mudar a classificação atual.
+5. `GET /api/v1/garages` (§7.1) devolvendo nome + geometria; destaque opcional no mapa.
+6. Atualizar `docs/regras-de-negocio.md` §4.3/§7.1/§8 e este documento no mesmo PR.
+
+**Pré-requisito de dados (a decidir antes de codar):** de onde vêm os polígonos?
+- (a) Dataset público (data.rio / SMTR), se houver camada de garagens/pátios;
+- (b) desenhar à mão (geojson.io) a partir dos endereços das garagens das empresas
+  do `companies.json`;
+- (c) **derivar dos próprios dados**: agrupar posições históricas com `serviceCode`
+  de garagem (`GARAGEM`, `1 GAR`) e extrair o envelope de cada cluster — viável via
+  BigQuery no histórico da SMTR, e o que melhor casa com a frota real.
+
+Sem os polígonos, a feature entrega o mecanismo (regra + porta + testes) com o dado
+vazio; `IN_GARAGE` continua vindo só do código de serviço até o GeoJSON entrar.

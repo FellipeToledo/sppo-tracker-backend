@@ -20,11 +20,13 @@ Prometheus. **Monólito modular com arquitetura hexagonal.**
 ## Comandos
 
 ```bash
-mvn --batch-mode test                 # roda todos os testes (JUnit 5 + AssertJ)
+mvn --batch-mode test                 # testes unitários (JUnit 5 + AssertJ) — exclui a tag "integration"
+mvn --batch-mode verify               # + ITs Testcontainers (*IntegrationTest) — precisa de Docker
 mvn -Dtest=CoordinatesTest test        # roda uma classe
 mvn -Dtest=CoordinatesTest#shouldDetectZeroZero test   # um método
 mvn spring-boot:run                   # sobe local (precisa de Redis:6379 e Postgres:5432)
-docker compose up -d --build          # sobe stack completa (backend + Redis + Postgres)
+docker compose up -d --build          # stack deste repo (backend + Redis + Postgres)
+docker compose -f docker-compose.stack.yml --env-file .env.stack up -d --build   # + sppo-gtfs-service
 ```
 
 ## Arquitetura
@@ -51,6 +53,14 @@ apontando para dentro (ver `package-info.java` de cada uma):
 - **Provider:** API pública, **sem credencial**. Coordenadas com vírgula decimal
   e timestamps em Unix time (desserializar defensivamente). O feed **não** traz
   `routeId`/`shapeId`/sentido.
+- **Geometria de itinerário:** vem do repo irmão **`sppo-gtfs-service`** (GTFS da
+  SMTR via BigQuery), resolvida por `serviceCode` **fora do hot path** (cache
+  assíncrono). Ligada por `ROUTE_SHAPE_SOURCE=gtfs-service`; default `disabled`.
+  A normalização do código de linha (`LineCodeKey`) **precisa** casar com o
+  `LineCode` do serviço — divergência quebra o join silenciosamente.
+- **Desvio de itinerário (§5):** máquina de estados por veículo, **ortogonal à
+  classificação** e alimentada pelo canal Redis de posições — não toque no
+  pipeline de ingestão para mexer nela.
 
 ## Convenções
 

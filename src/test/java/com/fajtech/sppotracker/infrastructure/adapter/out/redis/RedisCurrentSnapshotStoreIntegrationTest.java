@@ -8,11 +8,13 @@ import com.fajtech.sppotracker.domain.vehicle.PositionClassification;
 import com.fajtech.sppotracker.domain.vehicle.PositionSource;
 import com.fajtech.sppotracker.domain.vehicle.VehiclePosition;
 import com.fajtech.sppotracker.domain.vehicle.VehiclePositionStatus;
+import com.fajtech.sppotracker.infrastructure.adapter.out.persistence.RouteDeviationEventRepository;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -47,6 +49,11 @@ class RedisCurrentSnapshotStoreIntegrationTest {
 
     @Autowired
     private CurrentSnapshotStorePort snapshotStore;
+
+    // JPA está excluída neste IT (só Redis); mocka o repositório do histórico de desvios
+    // para o contexto completo carregar (o adapter de leitura depende dele).
+    @MockitoBean
+    private RouteDeviationEventRepository routeDeviationEventRepository;
 
     private static ClassifiedVehiclePosition snapshot(String vehicleId) {
         VehiclePosition position = VehiclePosition.builder()

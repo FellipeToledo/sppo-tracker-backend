@@ -170,9 +170,10 @@ tags).
 - A resolução de geometria **não roda no hot path**: shapes são resolvidos em
   background (cache assíncrono bounded); sob pico, o excesso é descartado e
   re-tentado, sem bloquear o polling.
-- ⚠️ **Com a API pública** (sem `routeId`/`shapeId`), esta regra fica
-  efetivamente **desligada** — configurável via fonte de shapes
-  (`shape-geom` | `fixture` | `disabled`).
+- **Fonte de geometria** (`ROUTE_SHAPE_SOURCE`): `gtfs-service` | `disabled`.
+  Com `disabled` (default) a regra nem é montada — é o comportamento com a API
+  pública pura, que não traz `routeId`/`shapeId`. Com `gtfs-service`, os shapes
+  vêm do **`sppo-gtfs-service`** resolvidos pelo `serviceCode` da linha (§8).
 
 ### 4.5 Flags derivadas da classificação
 Além do status, a classificação expõe booleans para consumo/filtragem:
@@ -261,14 +262,18 @@ empresas conhecidas, cada uma anotada com o consórcio (`consortiumCode`,
 ## 7. Distribuição e persistência
 
 ### 7.1 REST (v1)
-| Método | Caminho | Descrição |
-|---|---|---|
-| GET | `/api/v1/vehicle-positions/current` | snapshot atual; filtros: `serviceCode`, `routeId`, `classificationStatus` |
-| GET | `/api/v1/gps-polling/status` | status do último ciclo de polling |
-| GET | `/api/v1/garages` | lista de garagens (geofences) |
-| GET | `/api/v1/operators` | de-para de operadoras |
-| GET | `/api/v1/shapes/{shapeId}` | geometria do shape (quando fonte disponível) |
-| GET | `/api/v1/shapes/{shapeId}/corridor` | corredor (buffer) do shape |
+| Método | Caminho | Descrição | Status |
+|---|---|---|---|
+| GET | `/api/v1/vehicle-positions/current` | snapshot atual; filtros: `serviceCode`, `routeId`, `classificationStatus` | implementado |
+| GET | `/api/v1/gps-polling/status` | status do último ciclo de polling | implementado |
+| GET | `/api/v1/operators` | de-para de operadoras | implementado |
+| GET | `/api/v1/route-deviations` | histórico de desvios; filtros: `vehicleId`, `serviceCode`, `type`, `severity`, `limit` | implementado |
+| GET | `/api/v1/garages` | lista de garagens (geofences) | **planejado** (depende dos polígonos, §4.3) |
+| GET | `/api/v1/shapes/{shapeId}` | geometria do shape (quando fonte disponível) | **planejado** |
+| GET | `/api/v1/shapes/{shapeId}/corridor` | corredor (buffer) do shape | **planejado** |
+
+Além da API, `GET /` serve o **mapa de acompanhamento** (view Thymeleaf + Leaflet)
+alimentado por WebSocket.
 
 ### 7.2 WebSocket / STOMP
 - Endpoint: `/ws`.
@@ -279,7 +284,9 @@ empresas conhecidas, cada uma anotada com o consórcio (`consortiumCode`,
 Polling (execuções, duração, falhas consecutivas, últimos contadores
 received/valid/duplicated/changed/published/ignored), provider (chamadas
 externas, duração, janela solicitada), classificações por status, idade/atrasos
-das posições (ingestão, envio, servidor), resolução de shapes. Endpoints
+das posições (ingestão, envio, servidor), resolução de shapes
+(`gps.route.shape.resolve{result}`) e desvios de itinerário
+(`gps.route.deviations{type,severity}`). Endpoints
 `/actuator/health`, `/actuator/prometheus`.
 
 ### 7.4 Persistência
@@ -303,11 +310,22 @@ das posições (ingestão, envio, servidor), resolução de shapes. Endpoints
 | `GPS_POLLING_FAILURE_COOLDOWN` | `5m` | duração do cooldown |
 | `GPS_CURRENT_SNAPSHOT_TTL` | `15m` | TTL do snapshot atual (> stale) |
 | `GPS_STALE_POSITION_THRESHOLD` | `5m` | idade p/ marcar STALE |
-| `GPS_OUT_OF_ROUTE_DISTANCE_THRESHOLD_METERS` | `100` | fallback de distância ao traçado |
-| `ROUTE_SHAPE_SOURCE` | `shape-geom` | fonte de shapes: `shape-geom`\|`fixture`\|`disabled` |
+| `GPS_OUT_OF_ROUTE_DISTANCE_THRESHOLD_METERS` | `100` | fallback de distância ao traçado (shape degenerado) |
+| `ROUTE_SHAPE_SOURCE` | `disabled` | fonte de shapes: `gtfs-service`\|`disabled` (liga a regra OUT_OF_ROUTE) |
+| `GPS_ROUTE_CORRIDOR_METERS` | `15` | meia-largura do corredor do traçado |
+| `GPS_ROUTE_SHAPE_CACHE_TTL` | `6h` | validade da geometria em cache antes de re-resolver |
+| `GPS_ROUTE_SHAPE_EMPTY_CACHE_TTL` | `5m` | validade curta de um resultado **vazio** (evita congelar a linha se o gtfs-service estiver sem índice) |
+| `GPS_ROUTE_SHAPE_EMPTY_CACHE_TTL` | `5m` | TTL curto p/ resultado vazio (gtfs sem índice não congela linhas) |
+| `GPS_ROUTE_REFRESH_POOL_SIZE` / `_QUEUE_CAPACITY` | `2` / `500` | executor bounded de resolução em background |
+| `SPPO_GTFS_BASE_URL` | `http://localhost:8081` | URL do `sppo-gtfs-service` |
+| `SPPO_GTFS_API_KEY` | *(vazio)* | `X-Api-Key` p/ o gtfs-service (vazio = sem cabeçalho) |
+| `SPPO_GTFS_REQUEST_TIMEOUT` | `5s` | timeout da chamada ao gtfs-service |
 | `RIO_MUNICIPALITY_{MIN,MAX}_{LATITUDE,LONGITUDE}` | box do Rio | bounding box do município |
+| `DADOS_RIO_BASE_URL` / `DADOS_RIO_PATH` | `https://dados.mobilidade.rio` / `/gps/sppo` | endpoint do provider |
 | `DADOS_RIO_REQUEST_TIME_ZONE` | `America/Sao_Paulo` | fuso do filtro da API |
 | `DADOS_RIO_RETRY_MAX_ATTEMPTS` / `_BACKOFF` | `2` / `1s` | retry do provider |
+| `DADOS_RIO_MAX_IN_MEMORY_SIZE` | `33554432` (32 MB) | teto do corpo da resposta do provider |
+| `REDIS_TIMEOUT` | `5s` | timeout das operações Redis |
 | `GPS_ROUTE_DEVIATION_ENABLED` | `true` | liga eventos de desvio |
 | `GPS_ROUTE_DEVIATION_CONFIRMATION_MARGIN_METERS` | `30` | margem p/ "efetivamente fora" |
 | `GPS_ROUTE_DEVIATION_ALERT_POINTS` | `3` | pontos consecutivos p/ ALERT (C1) |
@@ -316,7 +334,7 @@ das posições (ingestão, envio, servidor), resolução de shapes. Endpoints
 | `GPS_ROUTE_DEVIATION_RETURN_POINTS` | `3` | pontos consecutivos p/ RETURN |
 | `GPS_ROUTE_DEVIATION_SWEEP_INTERVAL` | `30s` | intervalo do sweep |
 | `GPS_ROUTE_DEVIATION_STATE_TTL` | `6h` | TTL do estado de desvio |
-| `GPS_ROUTE_DEVIATION_SEVERITY_MEDIUM_METERS` / `_HIGH_METERS` | `150` / `500` | limiares de severidade |
+| `GPS_ROUTE_DEVIATION_SEVERITY_MEDIO_METERS` / `_GRAVE_METERS` | `150` / `500` | limiares de severidade (LEVE/MEDIO/GRAVE) |
 | `REDIS_HOST` / `REDIS_PORT` | `localhost` / `6379` | Redis |
 | `DB_HOST` / `DB_PORT` / `DB_NAME` / `DB_USER` / `DB_PASSWORD` | localhost / 5432 / sppotracker / … | Postgres |
 | `SERVER_PORT` | `8080` | porta HTTP |
@@ -357,12 +375,21 @@ das posições (ingestão, envio, servidor), resolução de shapes. Endpoints
     Postgres/Redis.
   - Opcionais: HTTPS/domínio via Caddy; Prometheus+Grafana; observabilidade.
   - *(Referência: guia detalhado `deploy-oracle-cloud.md` + `docker-compose.oracle.yml`.)*
-- [ ] **OUT_OF_ROUTE com a API pública:** como o feed público não traz
-      `routeId`/`shapeId`, avaliar fonte alternativa de itinerário (GTFS/shape-geom
-      próprio) ou manter a regra desligada.
-- [ ] **Unificar** a lógica dentro/fora do corredor entre `OutOfRouteRule` e o
-      resolvedor de aderência do desvio (hoje duplicada de propósito).
+- [x] **OUT_OF_ROUTE com a API pública** — resolvido com o **`sppo-gtfs-service`**
+      (repo irmão, shapes do GTFS da SMTR via BigQuery), resolvendo por
+      `serviceCode`. Ligado por `ROUTE_SHAPE_SOURCE=gtfs-service`; `disabled` é o
+      default. Destravou também a máquina de desvio (§5).
+- [x] **Unificar** a lógica dentro/fora do corredor — hoje única no
+      `RouteAdherenceEvaluator` (domínio), consumido pela `OutOfRouteRule` (§4.4) e
+      pelo `RouteDeviationService` (§5).
+- [ ] **Geofence de garagem (`GARAGE_GEOFENCE`, §4.3)** — *próxima feature*. Falta
+      a fonte dos polígonos GeoJSON de garagem (empacotados no jar), o teste
+      ponto-em-polígono no domínio e o endpoint `GET /api/v1/garages` (§7.1). A tag
+      já existe; hoje `IN_GARAGE` só é atingido por código de serviço.
+- [ ] **Revalidação por ETag** do cache de shapes: o `sppo-gtfs-service` já oferece
+      `ETag`/`304` + `feedVersion.id`, mas o cache do backend expira só por TTL (6h).
 - [ ] **Índices por classificação** em Redis, caso o filtro em memória do
       `/current` não escale.
-- [ ] **Dashboard/observabilidade** (mapa da frota por status, eventos ao vivo)
-      como front separado — candidato natural a deploy na Vercel, consumindo esta API.
+- [ ] **Dashboard/observabilidade** — o mapa da frota por status + eventos ao vivo
+      já existe embutido em `GET /` (Thymeleaf + Leaflet + WebSocket). Um front
+      separado (ex.: Vercel) consumindo esta API segue como evolução opcional.
