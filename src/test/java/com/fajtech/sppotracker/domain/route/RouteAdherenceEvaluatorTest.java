@@ -52,6 +52,33 @@ class RouteAdherenceEvaluatorTest {
     }
 
     @Test
+    void shouldNotQueryGeometryForOperationalStatusCodes() {
+        // Guarda contra I/O inútil: o campo `linha` do feed também traz estado operacional,
+        // que nunca terá shape. Medido no feed real: 8 códigos assim, re-tentados a cada
+        // expiração do TTL de vazio (§4.4).
+        RouteAdherenceEvaluator e = evaluatorWith(s -> {
+            throw new AssertionError("não deve pedir geometria para o código: " + s);
+        });
+        for (String code : List.of("GARAGEM", "ESPECIAL", "FORA DE OP", "1 GAR",
+                "MANUTENCAO", "TREINO", "RESERVADO", "OPER.", "00000", " ")) {
+            assertThat(e.evaluate(code, at(-22.9, -43.2)).isUnresolved())
+                    .as("código %s", code)
+                    .isTrue();
+        }
+    }
+
+    @Test
+    void shouldStillQueryGeometryForALineShapedCodeAbsentFromTheFeed() {
+        // 2802SV existe no feed de GPS e não no planejamento: continua sendo pedido, e o
+        // vazio resultante é sinal legítimo ("linha de verdade sem planejamento").
+        RouteAdherence a = evaluatorWith(s -> {
+            assertThat(s).isEqualTo("2802SV");
+            return List.of();
+        }).evaluate("2802SV", at(-22.9, -43.2));
+        assertThat(a.isUnresolved()).isTrue();
+    }
+
+    @Test
     void shouldReportClosestDistanceAcrossShapes() {
         RoutePath near = segment();
         RoutePath far = RoutePath.of("s2", List.of(at(-22.9500, -43.3000), at(-22.9500, -43.2900)));

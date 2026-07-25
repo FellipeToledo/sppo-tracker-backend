@@ -28,7 +28,7 @@ scheduler → readiness → cooldown → janela [now-90s, now] → fetch (provid
   `spring-boot-starter-webmvc-test` (o `@WebMvcTest` mudou para
   `org.springframework.boot.webmvc.test.autoconfigure`). Annotations Jackson
   permanecem em `com.fasterxml.jackson.annotation`.
-- **Testes:** `mvn --batch-mode test` → **236 testes, 0 falhas** (todos herméticos:
+- **Testes:** `mvn --batch-mode test` → **241 testes, 0 falhas** (todos herméticos:
   sem Redis/Postgres/rede reais — usam mocks, `SimpleMeterRegistry`, MockWebServer,
   `@WebMvcTest`). Os de integração (Testcontainers) rodam no `mvn verify` / CI.
 - **Estado do git (2026-07-25):** `main` tem as fatias A/B/C + stack de deploy (PR #11
@@ -217,6 +217,24 @@ criado e a regra não é montada (comportamento idêntico ao atual). Com
 `gtfs-service`, aponta-se `SPPO_GTFS_BASE_URL` (e `SPPO_GTFS_API_KEY` se houver).
 Métrica: `gps.route.shape.resolve{result=shapes|empty|failure}`.
 
+**Cobertura de geometria, medida no feed real (2026-07-25):** das **362** linhas
+distintas em operação, o `sppo-gtfs-service` resolve **349 com shape** — **95,5% da
+frota** (2.359 de 2.471 veículos). Nenhuma linha resolve "existe mas sem shape".
+Os 13 não resolvidos são: **8 códigos de estado operacional** (`GARAGEM` 46 veículos,
+`ESPECIAL` 31, `FORA DE OP` 9, `1 GAR`/`MANUTENCAO`/`TREINO` 4 cada, `RESERVADO` 2,
+`OPER.` 1) — agora **filtrados antes de pedir** (§4.4) — e **5 códigos com cara de linha
+que não estão no planejamento**: `001`, `1`, `3`, `441`, `856` (10 veículos) e `2802SV`
+(1 veículo, onde `2802` existe com 2 shapes: o feed de GPS usa sufixo `SV` que o
+`viagem_planejada_dia` não tem; **deixado sem resolver de propósito** — `SV` costuma ser
+*variante* de itinerário, e casar com os shapes de `2802` produziria aderência falsa).
+
+⚠️ **Cuidado ao ler `gps.route.shape.resolve{result=empty}`:** o contador é cumulativo e
+a corrida de arranque infla ele. No rebuild de 2026-07-25, backend e gtfs subiram juntos
+e o índice do gtfs leva ~21 s para montar — o primeiro minuto gerou **285 `empty`** e só
+3 `shapes`. O TTL curto de vazio (5 min) curou: 21 minutos depois, **353 `shapes`** contra
+324 `empty`, com taxa em regime de +8 `shapes` / +9 `empty` por ~5 min. Se `shapes` está
+crescendo, está convergindo; olhe a **taxa**, não o total.
+
 **Débito/known-gaps desta fatia:**
 - Cache por **TTL** (6h). O contrato do serviço oferece `ETag`/`304` + `feedVersion.id`;
   a revalidação por ETag ainda **não** foi implementada (melhoria de eficiência, não
@@ -357,7 +375,7 @@ snapshot: 1730 veículos → 1583 IN_OPERATION, 135 IN_GARAGE, 8 SUSPICIOUS, 3 O
 - Garagens mais cheias no instante: Transportes Paranapuan (35), Viação Redentor;
   Transportes Futuro (20), Viação Pavunense (16), Viação Vila Real (11).
 
-**Testes:** **36 novos** no total da feature (repo: **236**, verdes; `mvn verify` inclui
+**Testes:** **36 novos** no total da feature (repo: **241**, verdes; `mvn verify` inclui
 os 5 ITs Testcontainers). Além dos de domínio/adapter das fatias 1–4:
 `GarageControllerTest` (contrato GeoJSON, ordem lon/lat, anel fechado na resposta,
 coleção vazia com a geofence off, campos descritivos omitidos quando ausentes),

@@ -176,6 +176,14 @@ como dentro. Lacuna medida e ressalvas em `docs/estado-do-projeto.md` §10.
 - A resolução de geometria **não roda no hot path**: shapes são resolvidos em
   background (cache assíncrono bounded); sob pico, o excesso é descartado e
   re-tentado, sem bloquear o polling.
+- **Só resolve código que pode ser linha.** O campo `linha` do feed também carrega
+  **estado operacional** (`GARAGEM`, `ESPECIAL`, `FORA DE OP`, `1 GAR`, `MANUTENCAO`,
+  `TREINO`, `RESERVADO`, `OPER.`, `00000`), que nunca terá shape. Critério sobre a forma
+  normalizada: **sem espaço em branco, ao menos um dígito, e diferente de `0`**. Sem
+  isso, o serviço de geometria recebe chamada garantidamente inútil a cada expiração do
+  TTL de vazio e a métrica de resolução enche de `empty` permanente, escondendo o sinal
+  que importa (linha de verdade sem planejamento). É **pré-filtro do cliente**: não
+  altera a normalização compartilhada com o `sppo-gtfs-service`.
 - **Fonte de geometria** (`ROUTE_SHAPE_SOURCE`): `gtfs-service` | `disabled`.
   Com `disabled` (default) a regra nem é montada — é o comportamento com a API
   pública pura, que não traz `routeId`/`shapeId`. Com `gtfs-service`, os shapes

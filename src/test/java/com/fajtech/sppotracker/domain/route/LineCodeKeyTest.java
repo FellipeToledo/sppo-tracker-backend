@@ -40,6 +40,38 @@ class LineCodeKeyTest {
     }
 
     @Test
+    void shouldAcceptEveryRealSppoLineFormat() {
+        // Formatos observados no feed real (2026-07-25): numérico, SV, SN, LECD, SP, SVB, SR.
+        assertThat(LineCodeKey.looksLikeLine("100")).isTrue();
+        assertThat(LineCodeKey.looksLikeLine("0100")).isTrue();
+        assertThat(LineCodeKey.looksLikeLine("sv789")).isTrue();
+        assertThat(LineCodeKey.looksLikeLine("SN810")).isTrue();
+        assertThat(LineCodeKey.looksLikeLine("LECD11")).isTrue();
+        assertThat(LineCodeKey.looksLikeLine("SVB35")).isTrue();
+        assertThat(LineCodeKey.looksLikeLine("2802SV")).isTrue();
+    }
+
+    @Test
+    void shouldRejectOperationalStatusCodesThatWillNeverHaveAShape() {
+        // Todos observados no campo `linha` do feed real — não são linha, são estado.
+        assertThat(LineCodeKey.looksLikeLine("GARAGEM")).isFalse();
+        assertThat(LineCodeKey.looksLikeLine("ESPECIAL")).isFalse();
+        assertThat(LineCodeKey.looksLikeLine("MANUTENCAO")).isFalse();
+        assertThat(LineCodeKey.looksLikeLine("TREINO")).isFalse();
+        assertThat(LineCodeKey.looksLikeLine("RESERVADO")).isFalse();
+        assertThat(LineCodeKey.looksLikeLine("OPER.")).isFalse();
+        assertThat(LineCodeKey.looksLikeLine("FORA DE OP")).isFalse();
+        assertThat(LineCodeKey.looksLikeLine("1 GAR")).isFalse();
+        assertThat(LineCodeKey.looksLikeLine("00000")).isFalse();
+    }
+
+    @Test
+    void shouldRejectBlankOrNullAsLine() {
+        assertThat(LineCodeKey.looksLikeLine("   ")).isFalse();
+        assertThat(LineCodeKey.looksLikeLine(null)).isFalse();
+    }
+
+    @Test
     void shouldUppercaseIndependentlyOfDefaultLocale() {
         // Locale.ROOT evita o "dotless i" turco: "si" não deve virar "Sİ".
         Locale previous = Locale.getDefault();
