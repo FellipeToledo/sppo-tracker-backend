@@ -40,8 +40,29 @@ class RouteAdherenceEvaluatorTest {
     }
 
     @Test
-    void shouldReportUnresolvedWhenNoGeometry() {
-        assertThat(evaluatorWith(s -> List.of()).evaluate("100", at(-22.9, -43.2)).isUnresolved()).isTrue();
+    void shouldReportPendingWhenTheSourceCannotTellWhy() {
+        RouteAdherence a = evaluatorWith(s -> List.of()).evaluate("100", at(-22.9, -43.2));
+        assertThat(a.isUnresolved()).isTrue();
+        assertThat(a.isPending()).as("default conservador do port").isTrue();
+        assertThat(a.isNotPlanned()).isFalse();
+    }
+
+    @Test
+    void shouldReportNotPlannedWhenTheSourceIsAuthoritative() {
+        RouteAdherence a = evaluatorWith(new RouteGeometrySource() {
+            @Override
+            public List<RoutePath> pathsFor(String serviceCode) {
+                return List.of();
+            }
+
+            @Override
+            public Availability availabilityFor(String serviceCode) {
+                return Availability.NOT_PLANNED;
+            }
+        }).evaluate("856", at(-22.9, -43.2));
+
+        assertThat(a.isNotPlanned()).isTrue();
+        assertThat(a.isUnresolved()).as("segue 'sem geometria' para a máquina de desvio").isTrue();
     }
 
     @Test
@@ -49,6 +70,33 @@ class RouteAdherenceEvaluatorTest {
         RouteAdherenceEvaluator e = evaluatorWith(s -> List.of(segment()));
         assertThat(e.evaluate(" ", at(-22.9, -43.2)).isUnresolved()).isTrue();
         assertThat(e.evaluate("100", at(0, 0)).isUnresolved()).isTrue();
+    }
+
+    @Test
+    void shouldNotQueryGeometryForOperationalStatusCodes() {
+        // Guarda contra I/O inútil: o campo `linha` do feed também traz estado operacional,
+        // que nunca terá shape. Medido no feed real: 8 códigos assim, re-tentados a cada
+        // expiração do TTL de vazio (§4.4).
+        RouteAdherenceEvaluator e = evaluatorWith(s -> {
+            throw new AssertionError("não deve pedir geometria para o código: " + s);
+        });
+        for (String code : List.of("GARAGEM", "ESPECIAL", "FORA DE OP", "1 GAR",
+                "MANUTENCAO", "TREINO", "RESERVADO", "OPER.", "00000", " ")) {
+            assertThat(e.evaluate(code, at(-22.9, -43.2)).isUnresolved())
+                    .as("código %s", code)
+                    .isTrue();
+        }
+    }
+
+    @Test
+    void shouldStillQueryGeometryForALineShapedCodeAbsentFromTheFeed() {
+        // 2802SV existe no feed de GPS e não no planejamento: continua sendo pedido, e o
+        // vazio resultante é sinal legítimo ("linha de verdade sem planejamento").
+        RouteAdherence a = evaluatorWith(s -> {
+            assertThat(s).isEqualTo("2802SV");
+            return List.of();
+        }).evaluate("2802SV", at(-22.9, -43.2));
+        assertThat(a.isUnresolved()).isTrue();
     }
 
     @Test

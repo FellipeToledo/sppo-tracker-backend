@@ -15,6 +15,11 @@ import java.util.Objects;
  * <p>Um ponto está "dentro" se cair no corredor de <b>qualquer</b> shape: distância
  * {@code ≤ corridorMeters} para traçados com ≥ 2 pontos, ou {@code ≤ fallbackMeters}
  * para traçado degenerado (ponto único). Sem geometria ⇒ {@code UNRESOLVED}.
+ *
+ * <p>Antes de resolver, filtra códigos que não podem ser linha
+ * ({@link LineCodeKey#looksLikeLine}) — é o único ponto do sistema que dispara resolução
+ * de geometria, então a guarda vale para a classificação (§4.4) e para a máquina de
+ * desvio (§5) de uma vez.
  */
 public final class RouteAdherenceEvaluator {
 
@@ -31,12 +36,20 @@ public final class RouteAdherenceEvaluator {
     }
 
     public RouteAdherence evaluate(String serviceCode, Coordinates coordinates) {
-        if (serviceCode == null || serviceCode.isBlank() || coordinates.isZeroZero()) {
-            return RouteAdherence.unresolved();
+        // Só pede geometria para código que pode ser linha: o campo `linha` do feed também
+        // carrega estado operacional (GARAGEM, ESPECIAL, 1 GAR…), que nunca terá shape.
+        // Ver LineCodeKey#looksLikeLine — evita I/O inútil e mantém a métrica de resolução
+        // significando "linha de verdade sem planejamento".
+        if (!LineCodeKey.looksLikeLine(serviceCode) || coordinates.isZeroZero()) {
+            return RouteAdherence.pending();
         }
         List<RoutePath> paths = geometry.pathsFor(serviceCode);
         if (paths.isEmpty()) {
-            return RouteAdherence.unresolved();
+            // Separa o persistente do transitório: sem isso, "veículos sem itinerário"
+            // conta cache frio junto com linha fora do planejamento.
+            return geometry.availabilityFor(serviceCode) == RouteGeometrySource.Availability.NOT_PLANNED
+                    ? RouteAdherence.notPlanned()
+                    : RouteAdherence.pending();
         }
         double best = Double.MAX_VALUE;
         boolean inside = false;

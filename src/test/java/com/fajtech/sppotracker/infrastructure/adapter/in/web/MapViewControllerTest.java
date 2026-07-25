@@ -5,6 +5,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.model;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -22,5 +23,39 @@ class MapViewControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(view().name("map"))
                 .andExpect(model().attributeExists("reconcileSeconds"));
+    }
+
+    @Test
+    void shouldWireTheGarageLayerIntoTheView() throws Exception {
+        // Guarda de regressão do template: o mapa precisa do toggle, do pane próprio
+        // (para o polígono não cobrir o marcador) e da carga do GeoJSON (§4.3, §7.1).
+        String html = render();
+
+        assertThat(html)
+                .contains("id=\"garages\"")
+                .contains("createPane('garages')")
+                .contains("/api/v1/garages");
+    }
+
+    @Test
+    void shouldCategoriseUnevaluatedItineraryInsteadOfHidingIt() throws Exception {
+        // Nada é descartado: posição sem itinerário no feed entra no mapa com borda
+        // tracejada, linha no popup, entrada na legenda e contagem no rodapé (§4.4).
+        String html = render();
+
+        assertThat(html)
+                .contains("ROUTE_NOT_PLANNED")
+                .contains("sem planejamento no feed")
+                .contains("dashArray")
+                // O transitório é interno: não pode vazar para a view.
+                .doesNotContain("ROUTE_PENDING");
+    }
+
+    private String render() throws Exception {
+        return mockMvc.perform(get("/"))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
     }
 }

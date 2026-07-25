@@ -15,4 +15,30 @@ import java.util.List;
 public interface RouteGeometrySource {
 
     List<RoutePath> pathsFor(String serviceCode);
+
+    /**
+     * <b>Por que</b> {@link #pathsFor} veio vazio — a única forma de separar "a linha não
+     * tem itinerário no feed" (persistente) de "ainda não resolvi" (transitório). Sem essa
+     * distinção, o número de veículos sem itinerário infla a cada reinício do serviço.
+     *
+     * <p>Não dispara resolução: é leitura pura, para o hot path.
+     *
+     * <p>O default é <b>conservador</b>: sempre {@code PENDING}. Quem não sabe distinguir
+     * nunca afirma que a linha está fora do planejamento. Não consulta {@link #pathsFor}
+     * — isso agendaria resolução (o cache o faz) e faria uma segunda busca no hot path,
+     * quebrando o próprio contrato deste método. O chamador só pergunta quando
+     * {@code pathsFor} já veio vazio, então {@code RESOLVED} não é resposta útil aqui.
+     */
+    default Availability availabilityFor(String serviceCode) {
+        return Availability.PENDING;
+    }
+
+    enum Availability {
+        /** Geometria em cache. */
+        RESOLVED,
+        /** A fonte respondeu que a linha não tem itinerário no feed vigente. */
+        NOT_PLANNED,
+        /** Nunca resolvida (cache frio, resolução em background, executor saturado). */
+        PENDING
+    }
 }

@@ -53,6 +53,10 @@ apontando para dentro (ver `package-info.java` de cada uma):
 - **Provider:** API pública, **sem credencial**. Coordenadas com vírgula decimal
   e timestamps em Unix time (desserializar defensivamente). O feed **não** traz
   `routeId`/`shapeId`/sentido.
+- **Geofence de garagem:** polígonos oficiais do data.rio **empacotados** em
+  `src/main/resources/geofences/garages.geojson`, lidos no boot (`GPS_GARAGE_GEOFENCE_RESOURCE`
+  aceita `file:` para trocar sem rebuild). Pertinência por **ray casting** — nunca por
+  bounding box: pátio é côncavo.
 - **Geometria de itinerário:** vem do repo irmão **`sppo-gtfs-service`** (GTFS da
   SMTR via BigQuery), resolvida por `serviceCode` **fora do hot path** (cache
   assíncrono). Ligada por `ROUTE_SHAPE_SOURCE=gtfs-service`; default `disabled`.

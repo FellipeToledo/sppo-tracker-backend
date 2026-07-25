@@ -1,5 +1,6 @@
 package com.fajtech.sppotracker.infrastructure.adapter.out.messaging;
 
+import com.fajtech.sppotracker.application.port.in.GarageQueryUseCase;
 import com.fajtech.sppotracker.application.port.in.OperatorQueryUseCase;
 import com.fajtech.sppotracker.domain.operator.Company;
 import com.fajtech.sppotracker.domain.operator.Consortium;
@@ -31,13 +32,16 @@ class RedisVehiclePositionEventPublisherTest {
     private final ObjectMapper objectMapper = JsonMapper.builder().build();
     private StringRedisTemplate redisTemplate;
     private OperatorQueryUseCase operators;
+    private GarageQueryUseCase garages;
     private RedisVehiclePositionEventPublisher publisher;
 
     @BeforeEach
     void setUp() {
         redisTemplate = mock(StringRedisTemplate.class);
         operators = mock(OperatorQueryUseCase.class);
-        publisher = new RedisVehiclePositionEventPublisher(redisTemplate, objectMapper, operators);
+        garages = mock(GarageQueryUseCase.class);
+        when(garages.garageNameFor(org.mockito.ArgumentMatchers.any())).thenReturn(java.util.Optional.empty());
+        publisher = new RedisVehiclePositionEventPublisher(redisTemplate, objectMapper, operators, garages);
     }
 
     private static ClassifiedVehiclePosition event() {
@@ -62,10 +66,26 @@ class RedisVehiclePositionEventPublisherTest {
                 new Consortium("A", "Consórcio Intersul"),
                 new Company("A123", "Auto Viacao Exemplo Ltda")));
         String expectedJson = objectMapper.writeValueAsString(
-                VehiclePositionResponse.from(event, "Consórcio Intersul", "Auto Viacao Exemplo Ltda"));
+                VehiclePositionResponse.from(event, "Consórcio Intersul", "Auto Viacao Exemplo Ltda", null));
 
         publisher.publish(event);
 
+        verify(redisTemplate).convertAndSend(
+                RedisVehiclePositionEventPublisher.CHANNEL, expectedJson);
+    }
+
+    @Test
+    void shouldPublishGarageNameWhenTheGeofenceMatched() throws Exception {
+        ClassifiedVehiclePosition event = event();
+        when(operators.resolve("A12345")).thenReturn(new VehicleOperator(
+                new Consortium("A", "Consórcio Intersul"),
+                new Company("A123", "Auto Viacao Exemplo Ltda")));
+        when(garages.garageNameFor(event)).thenReturn(java.util.Optional.of("Real Auto Ônibus"));
+
+        publisher.publish(event);
+
+        String expectedJson = objectMapper.writeValueAsString(VehiclePositionResponse.from(
+                event, "Consórcio Intersul", "Auto Viacao Exemplo Ltda", "Real Auto Ônibus"));
         verify(redisTemplate).convertAndSend(
                 RedisVehiclePositionEventPublisher.CHANNEL, expectedJson);
     }

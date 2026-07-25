@@ -65,7 +65,11 @@ services:
     depends_on:
       redis: { condition: service_healthy }
       postgres: { condition: service_healthy }
-      sppo-gtfs-service: { condition: service_started }
+      # service_healthy, não service_started: o healthcheck do gtfs é o readiness probe,
+      # que só fica UP depois do índice montado (~20 s de BigQuery). Com service_started o
+      # backend resolvia a frota inteira contra índice vazio e cacheava esses vazios —
+      # 285 resoluções vazias no primeiro minuto, medido em 2026-07-25.
+      sppo-gtfs-service: { condition: service_healthy }
     ports: ["${SERVER_PORT:-8090}:8080"]
     environment:
       REDIS_HOST: redis

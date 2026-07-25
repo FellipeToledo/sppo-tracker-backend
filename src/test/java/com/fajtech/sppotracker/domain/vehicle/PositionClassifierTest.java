@@ -43,6 +43,20 @@ class PositionClassifierTest {
     }
 
     @Test
+    void routeNotPlannedIsALabelAndDoesNotChangeStatus() {
+        var classification = classifierWith(ClassificationTag.ROUTE_NOT_PLANNED)
+                .classify(anyPosition(), NOW);
+        assertThat(classification.status()).isEqualTo(VehiclePositionStatus.IN_OPERATION);
+        assertThat(classification.tags()).containsExactly(ClassificationTag.ROUTE_NOT_PLANNED);
+    }
+
+    @Test
+    void outOfRouteStillWinsOverRouteNotPlanned() {
+        assertThat(statusFor(ClassificationTag.OUT_OF_ROUTE, ClassificationTag.ROUTE_NOT_PLANNED))
+                .isEqualTo(VehiclePositionStatus.OUT_OF_ROUTE);
+    }
+
+    @Test
     void noTagsIsInOperation() {
         assertThat(statusFor()).isEqualTo(VehiclePositionStatus.IN_OPERATION);
     }

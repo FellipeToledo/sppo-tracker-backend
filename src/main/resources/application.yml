@@ -76,6 +76,12 @@ gps:
     api-key: ${SPPO_GTFS_API_KEY:}
     request-timeout: ${SPPO_GTFS_REQUEST_TIMEOUT:5s}
   geofence:
+    # Geofence de garagem (docs/regras-de-negocio.md §4.3). Dataset oficial do data.rio
+    # empacotado em resources/geofences/garages.geojson; aponte para file:/... para
+    # atualizar as garagens sem rebuild. Desligar volta IN_GARAGE ao código de serviço.
+    garages:
+      enabled: ${GPS_GARAGE_GEOFENCE_ENABLED:true}
+      resource: ${GPS_GARAGE_GEOFENCE_RESOURCE:classpath:geofences/garages.geojson}
     rio-municipality:
       min-latitude: ${RIO_MUNICIPALITY_MIN_LATITUDE:-23.10}
       max-latitude: ${RIO_MUNICIPALITY_MAX_LATITUDE:-22.70}

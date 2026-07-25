@@ -7,6 +7,8 @@ import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.ExchangeStrategies;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -44,6 +46,8 @@ import java.util.concurrent.TimeoutException;
 @Component
 public class DadosMobilidadeRioGpsProvider implements FetchExternalGpsPositionsPort {
 
+    private static final Logger log = LoggerFactory.getLogger(DadosMobilidadeRioGpsProvider.class);
+
     private static final DateTimeFormatter FILTER_FORMAT =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final int TOO_MANY_REQUESTS = 429;
@@ -60,6 +64,8 @@ public class DadosMobilidadeRioGpsProvider implements FetchExternalGpsPositionsP
 
     private final Counter requestsSuccess;
     private final Counter requestsFailure;
+    private final Counter recordsMapped;
+    private final Counter recordsMalformed;
     private final Timer requestDuration;
     private final DistributionSummary windowSeconds;
 
@@ -83,6 +89,13 @@ public class DadosMobilidadeRioGpsProvider implements FetchExternalGpsPositionsP
         this.requestsFailure = Counter.builder("gps.provider.requests").tag("outcome", "failure").register(registry);
         this.requestDuration = Timer.builder("gps.provider.request.duration")
                 .description("Duração da chamada ao provider (incl. retries)").register(registry);
+        // Registro malformado é o ÚNICO ponto do fluxo em que uma posição se perde (não
+        // tem coordenada válida, logo não há o que plotar). Contar é o que permite afirmar
+        // "nada é descartado silenciosamente" — antes disso, só havia um log.debug.
+        this.recordsMapped = Counter.builder("gps.provider.records")
+                .tag("result", "mapped").register(registry);
+        this.recordsMalformed = Counter.builder("gps.provider.records")
+                .tag("result", "malformed").register(registry);
         this.windowSeconds = DistributionSummary.builder("gps.provider.window.seconds")
                 .description("Amplitude da janela solicitada ao provider").baseUnit("seconds").register(registry);
     }
@@ -109,6 +122,13 @@ public class DadosMobilidadeRioGpsProvider implements FetchExternalGpsPositionsP
                     .blockOptional()
                     .orElseGet(List::of);
             List<VehiclePosition> positions = mapper.mapAll(items);
+            recordsMapped.increment(positions.size());
+            int malformed = items.size() - positions.size();
+            if (malformed > 0) {
+                recordsMalformed.increment(malformed);
+                log.warn("Descartados {} de {} registros do feed por estarem malformados",
+                        malformed, items.size());
+            }
             requestsSuccess.increment();
             return positions;
         } catch (RuntimeException e) {

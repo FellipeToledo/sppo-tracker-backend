@@ -114,6 +114,11 @@ Uma posição só é processada/publicada se **mudou**. Considera-se mudança qu
 - Um snapshot por veículo, renovado a cada heartbeat, com **TTL** (default
   **15 min**, deve ser **> stale-threshold**). Quando o veículo para de
   transmitir, o snapshot expira e sai do "current".
+- **Snapshot ilegível é pulado, não fatal.** Deploy que muda o formato do payload
+  (renomear uma tag, por exemplo) invalida o JSON já gravado, que ainda vive pelo TTL.
+  A leitura do "current" **descarta a entrada ilegível com aviso e devolve o resto** —
+  um registro ruim não derruba o lote (§9). O veículo reaparece no próximo heartbeat,
+  já no formato novo.
 
 ---
 
@@ -122,6 +127,14 @@ Uma posição só é processada/publicada se **mudou**. Considera-se mudança qu
 Cada posição recebe **um** status final. Um pipeline coleta as *tags* de todas as
 regras e decide o status por **ordem de precedência fixa** (não pela ordem das
 regras).
+
+> **Princípio: não se descarta posição, categoriza-se.** Toda posição que chega
+> mapeável recebe status e vai para o snapshot, o REST, o WebSocket e o mapa —
+> inclusive quando falta dado para avaliar alguma regra. O único ponto de perda é o
+> registro **malformado** do feed (sem coordenada válida, logo sem o que plotar), e
+> mesmo esse é **contado** em `gps.provider.records{result=malformed}`. Quando não há
+> itinerário para avaliar, a posição é rotulada `ROUTE_NOT_PLANNED` (§4.4) em vez de passar
+> como se estivesse na rota.
 
 ### 4.1 Status possíveis
 `IN_OPERATION`, `IN_GARAGE`, `OUT_OF_MUNICIPALITY`, `OUT_OF_ROUTE`,
@@ -147,16 +160,23 @@ tags).
 |---|---|---|---|
 | **Coordenadas inválidas** | `INVALID_COORDINATES` | posição é exatamente (0, 0) | — |
 | **Fora do município** | `OUT_OF_MUNICIPALITY` | fora do bounding box do Rio | box: lat [-23.10, -22.70], lon [-43.80, -43.05] (configurável) |
-| **Garagem (geofence)** | `GARAGE_GEOFENCE` | dentro de um polígono de garagem | polígonos GeoJSON empacotados |
+| **Garagem (geofence)** | `GARAGE_GEOFENCE` | dentro de um polígono de garagem | polígonos GeoJSON empacotados (`resources/geofences/garages.geojson`) |
 | **Código de serviço — garagem** | `IN_GARAGE` | `serviceCode` ∈ conjunto de garagem | `GARAGEM`, `1 GAR` |
 | **Código de serviço — suspeito** | `SUSPICIOUS_SERVICE_CODE` | `serviceCode` ∈ conjunto suspeito | `MANUTENCAO`, `MANUT`, `VISTORIA`, `FORA DE OP`, `FORA OP`, `FORA DE OPERACAO`, `TREINO`, `TREINA`, `OPER.`, `00000` |
 | **Posição obsoleta (stale)** | `STALE` | `positionTimestamp + threshold < now` | threshold default **5 min** |
 | **Fora de rota** | `OUT_OF_ROUTE` | fora do corredor de **todos** os shapes da rota | ver 4.4 |
+| **Sem planejamento** | `ROUTE_NOT_PLANNED` | código **é de linha** e a fonte respondeu que ela **não tem itinerário no feed vigente** | rótulo; **não** define status |
 
 **Normalização do `serviceCode`** (para as regras de código): remover acentos,
 `trim`, colapsar espaços, upper-case. Compara contra os conjuntos acima.
 
 **IN_GARAGE** é atingido por geofence **ou** por código de serviço de garagem.
+
+**Origem dos polígonos de garagem:** dataset **oficial do data.rio** ("Garagens de
+operadores do SPPO"), empacotado em `resources/geofences/garages.geojson` — 37 polígonos
+com operador, endereço e bairro, nos limites reais do lote. O teste é
+**ponto-em-polígono** (ray casting), não bounding box: pátio real é côncavo. Borda conta
+como dentro. Lacuna medida e ressalvas em `docs/estado-do-projeto.md` §10.
 
 ### 4.4 Regra OUT_OF_ROUTE (resolução de geometria)
 - **Não confia no `shapeId` do payload** (vem trocado ida/volta com frequência).
@@ -170,6 +190,30 @@ tags).
 - A resolução de geometria **não roda no hot path**: shapes são resolvidos em
   background (cache assíncrono bounded); sob pico, o excesso é descartado e
   re-tentado, sem bloquear o polling.
+- **Só resolve código que pode ser linha.** O campo `linha` do feed também carrega
+  **estado operacional** (`GARAGEM`, `ESPECIAL`, `FORA DE OP`, `1 GAR`, `MANUTENCAO`,
+  `TREINO`, `RESERVADO`, `OPER.`, `00000`), que nunca terá shape. Critério sobre a forma
+  normalizada: **sem espaço em branco, ao menos um dígito, e diferente de `0`**. Sem
+  isso, o serviço de geometria recebe chamada garantidamente inútil a cada expiração do
+  TTL de vazio e a métrica de resolução enche de `empty` permanente, escondendo o sinal
+  que importa (linha de verdade sem planejamento). É **pré-filtro do cliente**: não
+  altera a normalização compartilhada com o `sppo-gtfs-service`.
+- **Sem geometria ⇒ rótulo, não silêncio — e os dois casos são separados.** A posição
+  continua no mapa e nas APIs, com o status decidido pelas outras regras, mas **marcada
+  como não verificada**. Sem isso apareceria como `IN_OPERATION`/`onRoute` — indistinguível
+  de um veículo de fato conferido dentro do corredor.
+  - `ROUTE_NOT_PLANNED` — a fonte respondeu de forma **autoritativa** que a linha não tem
+    itinerário no feed vigente. **Persistente**, e o único rótulo **exposto**: é o número
+    que serve para operação.
+  - O caso **transitório** (geometria ainda não resolvida: cache frio, resolução em
+    background, executor saturado) é **estado interno** — `RouteAdherence.PENDING` — e
+    **não** vira tag. Motivo: o rótulo é gravado no snapshot no instante da classificação
+    e envelheceria, mostrando "sem itinerário" para veículo cuja geometria já chegou
+    (medido: 324 rótulos assim, sendo 190 das 237 linhas já resolvidas). A distinção
+    continua existindo no domínio, via `RouteGeometrySource.availabilityFor()`.
+  - Código que não é linha (`GARAGEM`, `ESPECIAL`) não recebe rótulo: não há itinerário a
+    avaliar. Quem não sabe distinguir (implementação simples da porta) responde
+    `PENDING` — **nunca** afirma que a linha está fora do planejamento.
 - **Fonte de geometria** (`ROUTE_SHAPE_SOURCE`): `gtfs-service` | `disabled`.
   Com `disabled` (default) a regra nem é montada — é o comportamento com a API
   pública pura, que não traz `routeId`/`shapeId`. Com `gtfs-service`, os shapes
@@ -178,6 +222,16 @@ tags).
 ### 4.5 Flags derivadas da classificação
 Além do status, a classificação expõe booleans para consumo/filtragem:
 `valid`, `insideMunicipality`, `insideGarage`, `onRoute` + o conjunto de `tags`.
+
+⚠️ **`onRoute` é booleano e não sabe dizer "não sei".** Leia junto com as tags: com
+`ROUTE_NOT_PLANNED` presente, `onRoute=true` significa apenas *"não foi constatado fora da
+rota"*.
+
+⚠️ **A ausência de `ROUTE_NOT_PLANNED` não afirma nada.** Não significa "conferido na rota"
+nem "a linha tem itinerário": também não há tag quando a geometria ainda estava resolvendo
+(estado interno `PENDING`, §4.4) **nem quando `ROUTE_SHAPE_SOURCE=disabled`**, caso em que a
+regra nem é montada e nenhuma posição é avaliada. Sem a tag, a aderência é simplesmente
+**desconhecida**.
 
 | Status | valid | insideMunicipality | insideGarage | onRoute |
 |---|---|---|---|---|
@@ -268,12 +322,16 @@ empresas conhecidas, cada uma anotada com o consórcio (`consortiumCode`,
 | GET | `/api/v1/gps-polling/status` | status do último ciclo de polling | implementado |
 | GET | `/api/v1/operators` | de-para de operadoras | implementado |
 | GET | `/api/v1/route-deviations` | histórico de desvios; filtros: `vehicleId`, `serviceCode`, `type`, `severity`, `limit` | implementado |
-| GET | `/api/v1/garages` | lista de garagens (geofences) | **planejado** (depende dos polígonos, §4.3) |
+| GET | `/api/v1/garages` | geofences de garagem em **GeoJSON** (`FeatureCollection`; `properties`: id, name, address, neighborhood, pointCount) | implementado |
 | GET | `/api/v1/shapes/{shapeId}` | geometria do shape (quando fonte disponível) | **planejado** |
 | GET | `/api/v1/shapes/{shapeId}/corridor` | corredor (buffer) do shape | **planejado** |
 
 Além da API, `GET /` serve o **mapa de acompanhamento** (view Thymeleaf + Leaflet)
-alimentado por WebSocket.
+alimentado por WebSocket, com camada de garagens ligável.
+
+O payload de posição (REST e WebSocket usam **o mesmo DTO**) traz `garageName` quando a
+posição caiu numa geofence de garagem — `null` fora de garagem e também quando o
+`IN_GARAGE` veio apenas do código de serviço, que não diz em qual pátio o veículo está.
 
 ### 7.2 WebSocket / STOMP
 - Endpoint: `/ws`.
@@ -310,6 +368,8 @@ das posições (ingestão, envio, servidor), resolução de shapes
 | `GPS_POLLING_FAILURE_COOLDOWN` | `5m` | duração do cooldown |
 | `GPS_CURRENT_SNAPSHOT_TTL` | `15m` | TTL do snapshot atual (> stale) |
 | `GPS_STALE_POSITION_THRESHOLD` | `5m` | idade p/ marcar STALE |
+| `GPS_GARAGE_GEOFENCE_ENABLED` | `true` | liga a regra `GARAGE_GEOFENCE` (§4.3) |
+| `GPS_GARAGE_GEOFENCE_RESOURCE` | `classpath:geofences/garages.geojson` | GeoJSON dos polígonos; aceita `file:/...` para atualizar sem rebuild |
 | `GPS_OUT_OF_ROUTE_DISTANCE_THRESHOLD_METERS` | `100` | fallback de distância ao traçado (shape degenerado) |
 | `ROUTE_SHAPE_SOURCE` | `disabled` | fonte de shapes: `gtfs-service`\|`disabled` (liga a regra OUT_OF_ROUTE) |
 | `GPS_ROUTE_CORRIDOR_METERS` | `15` | meia-largura do corredor do traçado |

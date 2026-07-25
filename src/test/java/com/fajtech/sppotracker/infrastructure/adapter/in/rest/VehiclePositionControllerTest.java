@@ -1,5 +1,6 @@
 package com.fajtech.sppotracker.infrastructure.adapter.in.rest;
 
+import com.fajtech.sppotracker.application.port.in.GarageQueryUseCase;
 import com.fajtech.sppotracker.application.port.in.GetCurrentVehiclePositionsUseCase;
 import com.fajtech.sppotracker.application.port.in.OperatorQueryUseCase;
 import com.fajtech.sppotracker.application.query.VehiclePositionFilter;
@@ -22,6 +23,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -45,6 +47,9 @@ class VehiclePositionControllerTest {
     @MockitoBean
     private OperatorQueryUseCase operators;
 
+    @MockitoBean
+    private GarageQueryUseCase garages;
+
     private static ClassifiedVehiclePosition snapshot() {
         VehiclePosition position = VehiclePosition.builder()
                 .vehicleId("A12345")
@@ -67,6 +72,8 @@ class VehiclePositionControllerTest {
                 new Consortium("A", "Consórcio Intersul"),
                 new Company("A123", "Auto Viacao Exemplo Ltda")));
 
+        when(garages.garageNameFor(any())).thenReturn(Optional.empty());
+
         mockMvc.perform(get("/api/v1/vehicle-positions/current"))
                 .andExpect(status().isOk())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
@@ -76,7 +83,21 @@ class VehiclePositionControllerTest {
                 .andExpect(jsonPath("$[0].valid").value(true))
                 .andExpect(jsonPath("$[0].latitude").value(-22.9))
                 .andExpect(jsonPath("$[0].consortiumName").value("Consórcio Intersul"))
-                .andExpect(jsonPath("$[0].companyName").value("Auto Viacao Exemplo Ltda"));
+                .andExpect(jsonPath("$[0].companyName").value("Auto Viacao Exemplo Ltda"))
+                .andExpect(jsonPath("$[0].garageName").doesNotExist());
+    }
+
+    @Test
+    void shouldLabelTheGarageWhenTheGeofenceMatched() throws Exception {
+        when(useCase.getCurrent(any())).thenReturn(List.of(snapshot()));
+        when(operators.resolve("A12345")).thenReturn(new VehicleOperator(
+                new Consortium("A", "Consórcio Intersul"),
+                new Company("A123", "Auto Viacao Exemplo Ltda")));
+        when(garages.garageNameFor(any())).thenReturn(Optional.of("Real Auto Ônibus"));
+
+        mockMvc.perform(get("/api/v1/vehicle-positions/current"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].garageName").value("Real Auto Ônibus"));
     }
 
     @Test
