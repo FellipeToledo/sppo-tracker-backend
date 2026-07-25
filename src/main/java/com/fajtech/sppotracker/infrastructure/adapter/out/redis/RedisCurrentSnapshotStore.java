@@ -3,6 +3,8 @@ package com.fajtech.sppotracker.infrastructure.adapter.out.redis;
 import com.fajtech.sppotracker.application.port.out.CurrentSnapshotStorePort;
 import com.fajtech.sppotracker.domain.vehicle.ClassifiedVehiclePosition;
 import com.fajtech.sppotracker.infrastructure.config.CurrentSnapshotProperties;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.Cursor;
 import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -21,6 +23,8 @@ import java.util.Optional;
  */
 @Component
 public class RedisCurrentSnapshotStore implements CurrentSnapshotStorePort {
+
+    private static final Logger log = LoggerFactory.getLogger(RedisCurrentSnapshotStore.class);
 
     private static final String KEY_PREFIX = "gps:snapshot:";
     private static final int SCAN_BATCH = 256;
@@ -73,10 +77,25 @@ public class RedisCurrentSnapshotStore implements CurrentSnapshotStorePort {
             return List.of();
         }
         List<ClassifiedVehiclePosition> snapshots = new ArrayList<>(values.size());
+        int unreadable = 0;
         for (String json : values) {
-            if (json != null) {
-                snapshots.add(deserialize(json));
+            if (json == null) {
+                continue;
             }
+            // Um snapshot ilegível NÃO pode derrubar a frota inteira (§9): pula, conta e
+            // segue. Acontece de verdade em deploy que muda o formato — ex.: renomear uma
+            // ClassificationTag invalida o JSON já gravado, e o dado velho ainda vive pelo
+            // TTL. O veículo reaparece no próximo heartbeat, com o formato novo.
+            ClassifiedVehiclePosition snapshot = tryDeserialize(json);
+            if (snapshot == null) {
+                unreadable++;
+            } else {
+                snapshots.add(snapshot);
+            }
+        }
+        if (unreadable > 0) {
+            log.warn("Ignorando {} de {} snapshots ilegíveis (formato antigo?) — serão "
+                    + "sobrescritos no próximo heartbeat de cada veículo", unreadable, values.size());
         }
         return snapshots;
     }
@@ -92,11 +111,13 @@ public class RedisCurrentSnapshotStore implements CurrentSnapshotStorePort {
         return keys;
     }
 
-    private ClassifiedVehiclePosition deserialize(String json) {
+    /** {@code null} quando o JSON não é legível no formato atual. */
+    private ClassifiedVehiclePosition tryDeserialize(String json) {
         try {
             return objectMapper.readValue(json, ClassifiedVehiclePosition.class);
         } catch (JacksonException e) {
-            throw new IllegalStateException("Falha ao desserializar snapshot", e);
+            log.debug("Snapshot ilegível descartado: {}", e.getMessage());
+            return null;
         }
     }
 

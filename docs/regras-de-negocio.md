@@ -114,6 +114,11 @@ Uma posição só é processada/publicada se **mudou**. Considera-se mudança qu
 - Um snapshot por veículo, renovado a cada heartbeat, com **TTL** (default
   **15 min**, deve ser **> stale-threshold**). Quando o veículo para de
   transmitir, o snapshot expira e sai do "current".
+- **Snapshot ilegível é pulado, não fatal.** Deploy que muda o formato do payload
+  (renomear uma tag, por exemplo) invalida o JSON já gravado, que ainda vive pelo TTL.
+  A leitura do "current" **descarta a entrada ilegível com aviso e devolve o resto** —
+  um registro ruim não derruba o lote (§9). O veículo reaparece no próximo heartbeat,
+  já no formato novo.
 
 ---
 

@@ -117,6 +117,30 @@ class RedisCurrentSnapshotStoreTest {
 
     @Test
     @SuppressWarnings("unchecked")
+    void shouldSkipUnreadableSnapshotsInsteadOfFailingTheWholeFleet() throws Exception {
+        // Aconteceu de verdade: um deploy renomeou uma ClassificationTag e o JSON já
+        // gravado (vivo pelo TTL) virou ilegível — o /current respondia 500 para a frota
+        // TODA por causa de algumas entradas. Um registro ruim não derruba o lote (§9).
+        ClassifiedVehiclePosition snapshot = snapshot();
+        String bom = objectMapper.writeValueAsString(snapshot);
+        // Simula o formato antigo: uma tag que o enum atual não conhece mais.
+        String antigo = bom.replace("\"OUT_OF_ROUTE\"", "\"ROUTE_UNRESOLVED\"");
+        assertThat(antigo).isNotEqualTo(bom);
+
+        Cursor<String> cursor = mock(Cursor.class);
+        when(cursor.hasNext()).thenReturn(true, true, false);
+        when(cursor.next()).thenReturn("gps:snapshot:A00001", "gps:snapshot:A12345");
+        when(redisTemplate.scan(org.mockito.ArgumentMatchers.any(ScanOptions.class))).thenReturn(cursor);
+        when(valueOps.multiGet(List.of("gps:snapshot:A00001", "gps:snapshot:A12345")))
+                .thenReturn(List.of(antigo, bom));
+
+        List<ClassifiedVehiclePosition> all = store.findAll();
+
+        assertThat(all).containsExactly(snapshot);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
     void shouldReturnEmptyListWhenNoKeys() {
         Cursor<String> cursor = mock(Cursor.class);
         when(cursor.hasNext()).thenReturn(false);
