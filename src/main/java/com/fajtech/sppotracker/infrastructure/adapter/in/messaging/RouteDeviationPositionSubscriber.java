@@ -42,6 +42,9 @@ public class RouteDeviationPositionSubscriber implements MessageListener {
             log.warn("Descartando posição malformada no canal Pub/Sub (desvio)", e);
             return;
         }
+        if (dto == null) {
+            return; // corpo JSON "null" desserializa como null
+        }
         VehiclePosition position = toPosition(dto);
         if (position != null) {
             service.onPosition(position);

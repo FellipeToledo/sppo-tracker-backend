@@ -40,8 +40,9 @@ public class RouteAdherenceConfig {
     /** Executor bounded para resolução em background; satura com AbortPolicy (§4.4). */
     @Bean(destroyMethod = "shutdown")
     public Executor routeShapeRefreshExecutor(RouteAdherenceProperties properties) {
+        int poolSize = properties.refreshPoolSize();
         return new ThreadPoolExecutor(
-                1, properties.refreshPoolSize(),
+                poolSize, poolSize,
                 60L, TimeUnit.SECONDS,
                 new ArrayBlockingQueue<>(properties.refreshQueueCapacity()),
                 runnable -> {

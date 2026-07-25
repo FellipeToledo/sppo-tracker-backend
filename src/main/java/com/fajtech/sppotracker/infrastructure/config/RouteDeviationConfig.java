@@ -49,11 +49,13 @@ public class RouteDeviationConfig {
     }
 
     @Bean
+    @ConditionalOnProperty(prefix = "gps.route.deviation", name = "enabled", havingValue = "true", matchIfMissing = true)
     public RecordRouteDeviationEventPort recordRouteDeviationEventPort(RouteDeviationEventRepository repository) {
         return new JpaRouteDeviationEventWriter(repository);
     }
 
     @Bean
+    @ConditionalOnProperty(prefix = "gps.route.deviation", name = "enabled", havingValue = "true", matchIfMissing = true)
     public PublishRouteDeviationEventPort publishRouteDeviationEventPort(StringRedisTemplate redisTemplate,
                                                                         ObjectMapper objectMapper) {
         return new RedisRouteDeviationEventPublisher(redisTemplate, objectMapper);

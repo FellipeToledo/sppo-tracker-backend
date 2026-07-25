@@ -25,7 +25,9 @@ public final class LineCodeKey {
         if (raw == null) {
             return null;
         }
-        String normalized = raw.trim().toUpperCase();
+        // Locale.ROOT: normalização independente do locale do host (evita, p.ex., o
+        // 'i' → 'İ' do locale turco, que quebraria o contrato compartilhado com o gtfs).
+        String normalized = raw.trim().toUpperCase(java.util.Locale.ROOT);
         if (normalized.isEmpty()) {
             return null;
         }

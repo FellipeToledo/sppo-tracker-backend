@@ -41,6 +41,9 @@ public class RouteDeviationEventRelay implements MessageListener {
             log.warn("Descartando evento de desvio malformado no canal Pub/Sub", e);
             return;
         }
+        if (event == null) {
+            return; // corpo JSON "null" desserializa como null
+        }
         messagingTemplate.convertAndSend(TOPIC, event);
         if (event.routeId() != null) {
             messagingTemplate.convertAndSend(TOPIC_BY_ROUTE + event.routeId(), event);

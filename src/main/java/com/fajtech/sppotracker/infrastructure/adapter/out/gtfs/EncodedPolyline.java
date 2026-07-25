@@ -45,11 +45,23 @@ final class EncodedPolyline {
         int result = 0;
         int b;
         do {
+            if (index >= encoded.length()) {
+                // Continuação truncada: string malformada — falha controlada para o
+                // provider poder pular este shape em vez de estourar o lote todo.
+                throw new MalformedPolylineException("polyline truncada em índice " + index);
+            }
             b = encoded.charAt(index++) - 63;
             result |= (b & 0x1f) << shift;
             shift += 5;
         } while (b >= 0x20);
         int delta = (result & 1) != 0 ? ~(result >> 1) : (result >> 1);
         return new int[]{delta, index};
+    }
+
+    /** Sinaliza uma polyline codificada malformada (ex.: truncada no meio de um valor). */
+    static final class MalformedPolylineException extends RuntimeException {
+        MalformedPolylineException(String message) {
+            super(message);
+        }
     }
 }

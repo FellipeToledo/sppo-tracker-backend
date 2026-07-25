@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class EncodedPolylineTest {
 
@@ -27,5 +28,19 @@ class EncodedPolylineTest {
     void shouldReturnEmptyForNullOrEmptyInput() {
         assertThat(EncodedPolyline.decode(null)).isEmpty();
         assertThat(EncodedPolyline.decode("")).isEmpty();
+    }
+
+    @Test
+    void shouldThrowMalformedWhenTruncatedMidValue() {
+        // "_p~iF" decodifica só a latitude do 1º ponto; falta a longitude → truncado.
+        assertThatThrownBy(() -> EncodedPolyline.decode("_p~iF"))
+                .isInstanceOf(EncodedPolyline.MalformedPolylineException.class);
+    }
+
+    @Test
+    void shouldThrowMalformedWhenContinuationBitNeverTerminates() {
+        // Todos os chars com bit de continuação (>= 0x20+63) e sem terminador.
+        assertThatThrownBy(() -> EncodedPolyline.decode("￿"))
+                .isInstanceOf(RuntimeException.class);
     }
 }

@@ -136,16 +136,43 @@ class DadosMobilidadeRioGpsProviderTest {
     }
 
     @Test
-    void shouldFailWhenResponseIsHtmlErrorPage() {
-        // Página de erro (ex.: "Service Unavailable") com HTTP 200 e text/html.
-        server.enqueue(new MockResponse()
-                .setHeader("Content-Type", "text/html;charset=utf-8")
-                .setBody("<html><head><title>Service Unavailable</title></head>"
-                        + "<body><h2>Service Unavailable</h2></body></html>"));
+    void shouldRetryHtmlErrorPageAndFailWhenExhausted() {
+        // Página de erro (ex.: "Service Unavailable") com HTTP 200 e text/html: tratada
+        // como falha transitória → re-tentada (retry-max-attempts=2 → 3 tentativas).
+        String errorPage = "<html><head><title>Service Unavailable</title></head>"
+                + "<body><h2>Service Unavailable</h2></body></html>";
+        for (int i = 0; i < 3; i++) {
+            server.enqueue(new MockResponse()
+                    .setHeader("Content-Type", "text/html;charset=utf-8")
+                    .setBody(errorPage));
+        }
 
         assertThatThrownBy(() -> provider.fetch(FROM, TO)).isInstanceOf(RuntimeException.class);
+        assertThat(server.getRequestCount()).isEqualTo(3);
         assertThat(requests("failure")).isEqualTo(1.0);
         assertThat(requests("success")).isZero();
+    }
+
+    @Test
+    void shouldRecoverWhenHtmlErrorPageIsFollowedByValidJson() {
+        // Primeira resposta é a página HTML de erro (transitória); o retry alcança JSON.
+        server.enqueue(new MockResponse()
+                .setHeader("Content-Type", "text/html;charset=utf-8")
+                .setBody("<html><body>Service Unavailable</body></html>"));
+        server.enqueue(new MockResponse()
+                .setHeader("Content-Type", "text/html;charset=utf-8")
+                .setBody("""
+                        [
+                          {"ordem":"C9","latitude":"-22,9","longitude":"-43,1",
+                           "datahora":"1690000000000","velocidade":"10","linha":"550",
+                           "datahoraenvio":"1690000002000","datahoraservidor":"1690000005000"}
+                        ]"""));
+
+        List<VehiclePosition> result = provider.fetch(FROM, TO);
+
+        assertThat(result).extracting(VehiclePosition::vehicleId).containsExactly("C9");
+        assertThat(server.getRequestCount()).isEqualTo(2);
+        assertThat(requests("success")).isEqualTo(1.0);
     }
 
     @Test

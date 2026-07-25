@@ -49,11 +49,15 @@ public record RouteDeviationProperties(
         if (returnPoints < 1) {
             returnPoints = 3;
         }
-        if (severityMedioMeters <= 0) {
+        if (!Double.isFinite(severityMedioMeters) || severityMedioMeters <= 0) {
             severityMedioMeters = 150.0;
         }
-        if (severityGraveMeters <= 0) {
+        if (!Double.isFinite(severityGraveMeters) || severityGraveMeters <= 0) {
             severityGraveMeters = 500.0;
+        }
+        if (severityGraveMeters < severityMedioMeters) {
+            throw new IllegalArgumentException(
+                    "gps.route.deviation.severity-grave-meters must be >= severity-medio-meters");
         }
         if (stateTtl == null || stateTtl.isZero() || stateTtl.isNegative()) {
             stateTtl = Duration.ofHours(6);

@@ -1,6 +1,7 @@
 package com.fajtech.sppotracker.domain.route;
 
 import java.time.Instant;
+import java.util.Objects;
 
 /**
  * Estado imutável da máquina de desvio de um veículo (docs/regras-de-negocio.md §5.3).
@@ -28,6 +29,16 @@ public record VehicleDeviationState(
         Instant lastObservedAt,
         String serviceCode,
         String routeId) {
+
+    public VehicleDeviationState {
+        Objects.requireNonNull(phase, "phase");
+        if (consecutiveOutside < 0 || consecutiveInside < 0) {
+            throw new IllegalArgumentException("consecutive counters must be >= 0");
+        }
+        if (!Double.isFinite(maxDistanceMeters) || maxDistanceMeters < 0) {
+            throw new IllegalArgumentException("maxDistanceMeters must be finite and non-negative");
+        }
+    }
 
     public static VehicleDeviationState initial() {
         return new VehicleDeviationState(

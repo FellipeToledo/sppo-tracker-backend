@@ -29,5 +29,21 @@ public record DeviationConfig(
         if (alertPoints < 1 || returnPoints < 1) {
             throw new IllegalArgumentException("alertPoints and returnPoints must be >= 1");
         }
+        if (confirmSustained.isZero() || confirmSustained.isNegative()) {
+            throw new IllegalArgumentException("confirmSustained must be positive");
+        }
+        requireFiniteNonNegative(confirmationMarginMeters, "confirmationMarginMeters");
+        requireFiniteNonNegative(confirmDistanceMeters, "confirmDistanceMeters");
+        requireFiniteNonNegative(severityMedioMeters, "severityMedioMeters");
+        requireFiniteNonNegative(severityGraveMeters, "severityGraveMeters");
+        if (severityGraveMeters < severityMedioMeters) {
+            throw new IllegalArgumentException("severityGraveMeters must be >= severityMedioMeters");
+        }
+    }
+
+    private static void requireFiniteNonNegative(double value, String field) {
+        if (!Double.isFinite(value) || value < 0) {
+            throw new IllegalArgumentException(field + " must be finite and non-negative");
+        }
     }
 }

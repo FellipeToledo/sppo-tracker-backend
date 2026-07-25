@@ -123,6 +123,22 @@ class RouteDeviationDetectorTest {
     }
 
     @Test
+    void sweepShouldNotConfirmWhenVehicleAlreadyStartedReturning() {
+        // ALERT aberto, depois um ponto dentro (consecutiveInside=1 < returnPoints):
+        // o veículo está voltando; o sweep não deve consolidar em CONFIRMED.
+        VehicleDeviationState state = openAlert();               // ALERT em T0+60s
+        state = observe(state, RouteAdherence.inside(5), T0.plusSeconds(90)).state();
+        assertThat(state.consecutiveInside()).isEqualTo(1);
+        assertThat(state.phase()).isEqualTo(DeviationPhase.OFF_ROUTE);
+
+        Instant sustained = T0.plusSeconds(60).plus(Duration.ofMinutes(3));
+        DeviationOutcome swept = detector.sweep(state, "A1001", sustained, CFG);
+
+        assertThat(swept.events()).isEmpty();
+        assertThat(swept.state().confirmed()).isFalse();
+    }
+
+    @Test
     void shouldStayUnchangedOnUnresolvedAdherence() {
         VehicleDeviationState state = VehicleDeviationState.initial();
         DeviationOutcome out = observe(state, RouteAdherence.unresolved(), T0);

@@ -92,7 +92,7 @@ public class DadosMobilidadeRioGpsProvider implements FetchExternalGpsPositionsP
         windowSeconds.record(Duration.between(from, to).toSeconds());
         Timer.Sample sample = Timer.start();
         try {
-            String body = webClient.get()
+            List<DadosMobilidadeRioGpsItem> items = webClient.get()
                     .uri(uriBuilder -> uriBuilder
                             .path(properties.path())
                             .queryParam("dataInicial", filterFormatter.format(from))
@@ -100,12 +100,15 @@ public class DadosMobilidadeRioGpsProvider implements FetchExternalGpsPositionsP
                             .build())
                     .retrieve()
                     .bodyToMono(String.class)
+                    // Parse dentro da cadeia reativa: uma página HTML de erro da SMTR
+                    // (transitória) precisa ser classificada e re-tentada pelo retryWhen.
+                    .map(this::parse)
                     .timeout(properties.requestTimeout())
                     .retryWhen(Retry.backoff(properties.retryMaxAttempts(), properties.retryBackoff())
                             .filter(DadosMobilidadeRioGpsProvider::isTransient))
                     .blockOptional()
-                    .orElse(null);
-            List<VehiclePosition> positions = mapper.mapAll(parse(body));
+                    .orElseGet(List::of);
+            List<VehiclePosition> positions = mapper.mapAll(items);
             requestsSuccess.increment();
             return positions;
         } catch (RuntimeException e) {
@@ -119,7 +122,8 @@ public class DadosMobilidadeRioGpsProvider implements FetchExternalGpsPositionsP
     /**
      * Desserializa o corpo como array JSON, independentemente do {@code Content-Type}.
      * Corpo vazio/nulo ⇒ lista vazia. Corpo não-JSON (página HTML de erro da SMTR) ⇒
-     * {@link IllegalStateException} — o ciclo é contabilizado como falha e re-tentado.
+     * {@link TransientFeedException} — classificada como transitória e re-tentada
+     * pelo {@code retryWhen} da cadeia reativa.
      */
     private List<DadosMobilidadeRioGpsItem> parse(String body) {
         if (body == null || body.isBlank()) {
@@ -129,8 +133,15 @@ public class DadosMobilidadeRioGpsProvider implements FetchExternalGpsPositionsP
             List<DadosMobilidadeRioGpsItem> items = objectMapper.readValue(body, ITEM_LIST);
             return items == null ? List.of() : items;
         } catch (JacksonException e) {
-            throw new IllegalStateException(
+            throw new TransientFeedException(
                     "Resposta não-JSON do feed SMTR (provável indisponibilidade): " + snippet(body), e);
+        }
+    }
+
+    /** Falha transitória do feed (ex.: página HTML de erro com HTTP 200): elegível a retry. */
+    static final class TransientFeedException extends RuntimeException {
+        TransientFeedException(String message, Throwable cause) {
+            super(message, cause);
         }
     }
 
@@ -139,13 +150,17 @@ public class DadosMobilidadeRioGpsProvider implements FetchExternalGpsPositionsP
         return stripped.length() <= SNIPPET_MAX ? stripped : stripped.substring(0, SNIPPET_MAX) + "…";
     }
 
-    /** Transitório = timeout, erro de conexão, HTTP 5xx ou HTTP 429 (§3.1). */
+    /**
+     * Transitório = timeout, erro de conexão, HTTP 5xx, HTTP 429 ou página HTML de erro
+     * da SMTR ({@link TransientFeedException}) (§3.1).
+     */
     private static boolean isTransient(Throwable throwable) {
         if (throwable instanceof WebClientResponseException response) {
             return response.getStatusCode().is5xxServerError()
                     || response.getStatusCode().value() == TOO_MANY_REQUESTS;
         }
         return throwable instanceof TimeoutException
-                || throwable instanceof WebClientRequestException;
+                || throwable instanceof WebClientRequestException
+                || throwable instanceof TransientFeedException;
     }
 }

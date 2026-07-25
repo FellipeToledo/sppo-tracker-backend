@@ -17,6 +17,13 @@ public record RouteAdherence(Status status, double distanceMeters) {
 
     public enum Status {INSIDE, OUTSIDE, UNRESOLVED}
 
+    public RouteAdherence {
+        java.util.Objects.requireNonNull(status, "status");
+        if (status != Status.UNRESOLVED && (!Double.isFinite(distanceMeters) || distanceMeters < 0)) {
+            throw new IllegalArgumentException("resolved distance must be finite and non-negative");
+        }
+    }
+
     private static final RouteAdherence UNRESOLVED = new RouteAdherence(Status.UNRESOLVED, Double.NaN);
 
     public static RouteAdherence inside(double distanceMeters) {

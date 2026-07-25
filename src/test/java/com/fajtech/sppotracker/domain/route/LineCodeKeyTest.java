@@ -2,6 +2,8 @@ package com.fajtech.sppotracker.domain.route;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.Locale;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -35,5 +37,17 @@ class LineCodeKeyTest {
     void shouldReturnNullForBlankOrNull() {
         assertThat(LineCodeKey.of("   ")).isNull();
         assertThat(LineCodeKey.of(null)).isNull();
+    }
+
+    @Test
+    void shouldUppercaseIndependentlyOfDefaultLocale() {
+        // Locale.ROOT evita o "dotless i" turco: "si" não deve virar "Sİ".
+        Locale previous = Locale.getDefault();
+        try {
+            Locale.setDefault(new Locale("tr", "TR"));
+            assertThat(LineCodeKey.of("si42")).isEqualTo("SI42");
+        } finally {
+            Locale.setDefault(previous);
+        }
     }
 }

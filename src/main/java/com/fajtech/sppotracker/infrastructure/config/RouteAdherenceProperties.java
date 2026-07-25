@@ -34,10 +34,10 @@ public record RouteAdherenceProperties(
         if (shapeSource == null) {
             shapeSource = ShapeSource.DISABLED;
         }
-        if (corridorMeters <= 0) {
+        if (!Double.isFinite(corridorMeters) || corridorMeters <= 0) {
             corridorMeters = 15.0;
         }
-        if (fallbackDistanceThresholdMeters <= 0) {
+        if (!Double.isFinite(fallbackDistanceThresholdMeters) || fallbackDistanceThresholdMeters <= 0) {
             fallbackDistanceThresholdMeters = 100.0;
         }
         if (cacheTtl == null || cacheTtl.isZero() || cacheTtl.isNegative()) {

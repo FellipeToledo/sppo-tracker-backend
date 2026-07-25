@@ -28,7 +28,7 @@ scheduler → readiness → cooldown → janela [now-90s, now] → fetch (provid
   `spring-boot-starter-webmvc-test` (o `@WebMvcTest` mudou para
   `org.springframework.boot.webmvc.test.autoconfigure`). Annotations Jackson
   permanecem em `com.fasterxml.jackson.annotation`.
-- **Testes:** `mvn --batch-mode test` → **188 testes, 0 falhas** (todos herméticos:
+- **Testes:** `mvn --batch-mode test` → **199 testes, 0 falhas** (todos herméticos:
   sem Redis/Postgres/rede reais — usam mocks, `SimpleMeterRegistry`, MockWebServer,
   `@WebMvcTest`).
 - **Branch de trabalho:** `claude/sppo-tracker-setup-cd7vmo`. **Nenhum PR aberto**

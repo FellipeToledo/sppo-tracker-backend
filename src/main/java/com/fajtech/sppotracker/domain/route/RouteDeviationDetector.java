@@ -90,7 +90,10 @@ public class RouteDeviationDetector {
      * tempo sustentado desde a abertura e ainda não houve CONFIRMED, emite CONFIRMED.
      */
     public DeviationOutcome sweep(VehicleDeviationState prev, String vehicleId, Instant now, DeviationConfig cfg) {
-        if (prev.phase() != DeviationPhase.OFF_ROUTE || prev.confirmed() || prev.episodeStart() == null) {
+        // Não consolida por tempo se o veículo já começou a voltar (pontos dentro
+        // abaixo de returnPoints): o episódio deve fechar em CANCELLED/RETURN, não CONFIRMED.
+        if (prev.phase() != DeviationPhase.OFF_ROUTE || prev.confirmed()
+                || prev.consecutiveInside() > 0 || prev.episodeStart() == null) {
             return new DeviationOutcome(prev, List.of());
         }
         if (Duration.between(prev.episodeStart(), now).compareTo(cfg.confirmSustained()) < 0) {

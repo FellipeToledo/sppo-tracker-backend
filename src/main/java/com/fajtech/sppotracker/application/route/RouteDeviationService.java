@@ -11,6 +11,8 @@ import com.fajtech.sppotracker.domain.route.RouteDeviationDetector;
 import com.fajtech.sppotracker.domain.route.RouteDeviationEvent;
 import com.fajtech.sppotracker.domain.route.VehicleDeviationState;
 import com.fajtech.sppotracker.domain.vehicle.VehiclePosition;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -32,6 +34,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * roda <b>fora</b> do lock). Estados sem observação há mais que o TTL são podados no sweep.
  */
 public final class RouteDeviationService {
+
+    private static final Logger log = LoggerFactory.getLogger(RouteDeviationService.class);
 
     private final RouteAdherenceEvaluator evaluator;
     private final RouteDeviationDetector detector;
@@ -103,9 +107,23 @@ public final class RouteDeviationService {
 
     private void dispatch(List<RouteDeviationEvent> events) {
         for (RouteDeviationEvent event : events) {
-            recorder.record(event);
-            publisher.publish(event);
-            metrics.recordEmitted(event.type(), event.severity());
+            // Persistência, publicação e métrica são independentes: uma falha em um
+            // efeito não deve abortar o lote nem os demais efeitos do mesmo evento.
+            try {
+                recorder.record(event);
+            } catch (RuntimeException e) {
+                log.warn("Falha ao persistir evento de desvio {}", event.type(), e);
+            }
+            try {
+                publisher.publish(event);
+            } catch (RuntimeException e) {
+                log.warn("Falha ao publicar evento de desvio {}", event.type(), e);
+            }
+            try {
+                metrics.recordEmitted(event.type(), event.severity());
+            } catch (RuntimeException e) {
+                log.warn("Falha ao registrar métrica de desvio {}", event.type(), e);
+            }
         }
     }
 }

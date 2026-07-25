@@ -29,5 +29,8 @@ public record RouteDeviationEvent(
         Objects.requireNonNull(vehicleId, "vehicleId");
         Objects.requireNonNull(type, "type");
         Objects.requireNonNull(occurredAt, "occurredAt");
+        if (!Double.isFinite(distanceMeters) || distanceMeters < 0) {
+            throw new IllegalArgumentException("distanceMeters must be finite and non-negative");
+        }
     }
 }

@@ -94,7 +94,15 @@ public class SppoGtfsShapeProvider implements ResolveRouteShapesPort {
             if (shape == null || shape.encodedPolyline() == null) {
                 continue;
             }
-            List<Coordinates> points = EncodedPolyline.decode(shape.encodedPolyline());
+            List<Coordinates> points;
+            try {
+                points = EncodedPolyline.decode(shape.encodedPolyline());
+            } catch (EncodedPolyline.MalformedPolylineException malformed) {
+                // Um shape corrompido não deve invalidar os demais da mesma linha.
+                log.debug("Shape {} com polyline malformada, ignorado: {}",
+                        shape.shapeId(), malformed.getMessage());
+                continue;
+            }
             if (points.size() >= MIN_POINTS) {
                 paths.add(RoutePath.of(shape.shapeId(), points));
             }

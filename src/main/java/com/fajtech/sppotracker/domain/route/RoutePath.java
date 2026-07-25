@@ -24,26 +24,28 @@ public record RoutePath(String shapeId, List<Coordinates> points, BoundingBox bb
         if (points.isEmpty()) {
             throw new IllegalArgumentException("points must not be empty");
         }
-        Objects.requireNonNull(bbox, "bbox");
+        // A bbox é sempre derivada dos pontos — garante consistência mesmo em
+        // construção direta (o parâmetro recebido é ignorado por design).
+        bbox = computeBoundingBox(points);
     }
 
     /** Cria um traçado computando a bounding box a partir dos pontos. */
     public static RoutePath of(String shapeId, List<Coordinates> points) {
-        List<Coordinates> copy = List.copyOf(points);
-        if (copy.isEmpty()) {
-            throw new IllegalArgumentException("points must not be empty");
-        }
-        BigDecimal minLat = copy.getFirst().latitude();
+        return new RoutePath(shapeId, points, null);
+    }
+
+    private static BoundingBox computeBoundingBox(List<Coordinates> points) {
+        BigDecimal minLat = points.getFirst().latitude();
         BigDecimal maxLat = minLat;
-        BigDecimal minLon = copy.getFirst().longitude();
+        BigDecimal minLon = points.getFirst().longitude();
         BigDecimal maxLon = minLon;
-        for (Coordinates c : copy) {
+        for (Coordinates c : points) {
             minLat = minLat.min(c.latitude());
             maxLat = maxLat.max(c.latitude());
             minLon = minLon.min(c.longitude());
             maxLon = maxLon.max(c.longitude());
         }
-        return new RoutePath(shapeId, copy, new BoundingBox(minLat, maxLat, minLon, maxLon));
+        return new BoundingBox(minLat, maxLat, minLon, maxLon);
     }
 
     /** True se o ponto cai no corredor de tolerância {@code thresholdMeters} deste traçado. */
