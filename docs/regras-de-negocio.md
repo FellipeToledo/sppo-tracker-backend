@@ -180,10 +180,32 @@ como dentro. Lacuna medida e ressalvas em `docs/estado-do-projeto.md` §10.
 
 ### 4.4 Regra OUT_OF_ROUTE (resolução de geometria)
 - **Não confia no `shapeId` do payload** (vem trocado ida/volta com frequência).
-- **Preferencial:** resolve **todos os shapes** da linha pelo `routeId` e testa a
-  posição contra o **corredor** (buffer dos segmentos, ex.: ±15 m) de cada um.
+- **O corredor é definido pela SMTR, não por nós.** A fonte é
+  `rj-smtr.planejamento.segmento_shape` — pela própria descrição da tabela, *"shapes
+  segmentados usados na **validação de viagens**"*. Dela vêm **duas** coisas:
+  - **Largura: 20 m.** Coluna `buffer_completo` — *"Área de 20 m ao redor do segmento"*.
+    É o valor oficial; `GPS_ROUTE_CORRIDOR_METERS` existe para ajuste operacional, **não**
+    para inventar largura (ver §9).
+  - **Segmentos que não entram na validação**, por flag: `indicador_segmento_desconsiderado`
+    (*"deve ser desconsiderado na validação de viagens"*), `indicador_tunel` (GPS não é
+    confiável em túnel), `indicador_area_prejudicada` (buffer perdeu >50% da área no
+    tratamento) e `indicador_segmento_pequeno` (< 990 m). **Posição sobre segmento
+    excluído não produz `OUT_OF_ROUTE`.**
+- **Preferencial:** resolve **todos os shapes** da linha pelo `serviceCode` e testa a
+  posição contra o corredor de 20 m dos **segmentos não excluídos** de cada shape.
   - Está "na rota" se cair no corredor de **qualquer** shape.
   - É `OUT_OF_ROUTE` só se estiver fora de **todos** os shapes resolvidos.
+- **Por que não carregamos a geometria do buffer** (`buffer`/`buffer_completo`), e sim a
+  linha do segmento + a largura de 20 m: medido em 2026-07-25 no feed vigente, a **união**
+  dos buffers tratados e a dos completos têm **área idêntica (100,00%)** nos shapes mais
+  segmentados — o tratamento remove sobreposição *entre segmentos vizinhos*, não área de
+  rota. Para a pergunta booleana "está na rota?" as duas dão a mesma resposta, e distância
+  ≤ 20 m à linha do segmento é, por definição, o buffer completo. Custo comparado (WKT
+  médio por shape): shape inteiro **7,9 KB** · linhas segmentadas **13,1 KB (1,65×)** ·
+  buffers **119,0 KB (15×)**, num total de 160,8 MB e ~4,6 M vértices. Pagar 15× para
+  obter o mesmo booleano não se justifica. ⚠️ **A geometria tratada passa a ser obrigatória
+  se/quando entrar a validação por segmento** (§11) — lá a atribuição ponto→segmento
+  depende justamente do tratamento.
 - **Fallback (sem `routeId` ou fonte indisponível):** usa o `shapeId` do payload
   — corredor; sem corredor, distância ao traçado cru comparada ao limiar
   (default **100 m**).
@@ -372,7 +394,7 @@ das posições (ingestão, envio, servidor), resolução de shapes
 | `GPS_GARAGE_GEOFENCE_RESOURCE` | `classpath:geofences/garages.geojson` | GeoJSON dos polígonos; aceita `file:/...` para atualizar sem rebuild |
 | `GPS_OUT_OF_ROUTE_DISTANCE_THRESHOLD_METERS` | `100` | fallback de distância ao traçado (shape degenerado) |
 | `ROUTE_SHAPE_SOURCE` | `disabled` | fonte de shapes: `gtfs-service`\|`disabled` (liga a regra OUT_OF_ROUTE) |
-| `GPS_ROUTE_CORRIDOR_METERS` | `15` | meia-largura do corredor do traçado |
+| `GPS_ROUTE_CORRIDOR_METERS` | `20` | meia-largura do corredor — **valor oficial da SMTR** (`segmento_shape.buffer_completo`, §4.4); alterar só com justificativa |
 | `GPS_ROUTE_SHAPE_CACHE_TTL` | `6h` | validade da geometria em cache antes de re-resolver |
 | `GPS_ROUTE_SHAPE_EMPTY_CACHE_TTL` | `5m` | validade curta de um resultado **vazio** (evita congelar a linha se o gtfs-service estiver sem índice) |
 | `GPS_ROUTE_SHAPE_EMPTY_CACHE_TTL` | `5m` | TTL curto p/ resultado vazio (gtfs sem índice não congela linhas) |
@@ -415,6 +437,15 @@ das posições (ingestão, envio, servidor), resolução de shapes
   resolução de geometria nunca bloqueia o polling.
 - **Fusos/tempo:** persistir/computar em UTC; converter só na borda (filtro da
   API em horário de Brasília).
+- **Nenhum limiar inventado.** Todo valor de regra tem de ter **origem rastreável no dado
+  oficial** (tabela/coluna do `rj-smtr.*`, com a descrição citada) ou vir de decisão
+  registrada aqui. Se não há dado nem definição publicada, a regra fica **desligada** ou a
+  posição é marcada como **não avaliada** (ex.: `ROUTE_NOT_PLANNED`, §4.4) — nunca se
+  escolhe um número plausível. O sistema mostra a operação do SPPO como o dado diz;
+  achismo com aparência de fato é o pior defeito possível aqui.
+  *Precedente:* o corredor nasceu como "±15 m" sem origem, quando a SMTR define **20 m**
+  em `segmento_shape.buffer_completo` — 25% mais estreito, ignorando túnel e os 3.404
+  segmentos que ela manda desconsiderar.
 - **Commits:** Conventional Commits, mensagens em inglês.
 
 ---
@@ -453,3 +484,47 @@ das posições (ingestão, envio, servidor), resolução de shapes
 - [ ] **Dashboard/observabilidade** — o mapa da frota por status + eventos ao vivo
       já existe embutido em `GET /` (Thymeleaf + Leaflet + WebSocket). Um front
       separado (ex.: Vercel) consumindo esta API segue como evolução opcional.
+
+---
+
+## 11. Validação por segmento (planejado — não implementado)
+
+Registro da regra e do dado, para quando entrar a contagem de **quantos segmentos da
+viagem o veículo cumpriu** — que é como a SMTR valida viagem, e base de subsídio.
+
+**Fonte:** `rj-smtr.planejamento.segmento_shape`, particionada por `feed_start_date`.
+No feed de 2026-07-24: **38.468 segmentos** em **1.412 shapes** (~27 por shape, máx. 81),
+comprimento médio **981 m**.
+
+| coluna | papel na validação |
+|---|---|
+| `id_segmento` | identificador do segmento dentro do shape |
+| `segmento` / `wkt_segmento` | a linha do segmento (é o que usamos hoje para o corredor, §4.4) |
+| `buffer_completo` | área de **20 m** ao redor do segmento |
+| **`buffer`** | idem, **com tratamento para não haver interseções** entre ele e os segmentos posteriores |
+| `comprimento_segmento` | metros |
+| `indicador_tunel` | segmento em túnel (1.868 no feed) |
+| `indicador_segmento_desconsiderado` | não entra na validação (3.404 no feed) |
+| `indicador_area_prejudicada` | buffer perdeu >50% da área no tratamento (398) |
+| `indicador_segmento_pequeno` | segmento < 990 m (1.397) |
+
+⚠️ **Aqui o `buffer` tratado é obrigatório** — e é a diferença em relação à §4.4. Para o
+booleano "está na rota", medimos que a **união** dos buffers tratados e a dos completos têm
+área idêntica (100,00%), então a linha + 20 m basta. Mas para **atribuir** um ponto a **um**
+segmento — que é o que a contagem exige — o tratamento é justamente o que remove a
+ambiguidade nas sobreposições entre segmentos vizinhos. Sem ele, um ponto na emenda contaria
+para dois segmentos.
+
+**Custo a orçar quando a fatia entrar** (medido em 2026-07-25, WKT médio por shape):
+
+```
+shape inteiro          7,9 KB
+linhas segmentadas    13,1 KB   (1,65x)   <- o que usamos hoje
+buffers tratados     119,0 KB   (15x)     <- necessário para atribuição por segmento
+total dos buffers    160,8 MB  (~4,6 M vértices)
+```
+
+Com `mem_limit: 1g` por container, isso cabe, mas exige decisão explícita: servir buffer
+sob demanda por linha (em vez de índice completo), ou mover a atribuição para o
+`sppo-gtfs-service`, que já tem a geometria. **Não** dimensionar por estimativa: medir de
+novo no feed vigente antes de implementar.

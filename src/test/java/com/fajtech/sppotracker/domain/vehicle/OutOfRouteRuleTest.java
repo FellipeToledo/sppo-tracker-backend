@@ -14,7 +14,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 class OutOfRouteRuleTest {
 
     private static final Instant NOW = Instant.parse("2026-07-23T12:00:00Z");
-    private static final double CORRIDOR = 15.0;
+    /** Largura oficial da SMTR (segmento_shape.buffer_completo, §4.4). */
+    private static final double CORRIDOR = 20.0;
     private static final double FALLBACK = 100.0;
 
     private static Coordinates at(double lat, double lon) {

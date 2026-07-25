@@ -52,7 +52,10 @@ gps:
     # Fonte de itinerário (docs/regras-de-negocio.md §4.4, §8): disabled | gtfs-service.
     # Com 'disabled' a regra OUT_OF_ROUTE nem é montada (comportamento do feed público).
     shape-source: ${ROUTE_SHAPE_SOURCE:disabled}
-    corridor-meters: ${GPS_ROUTE_CORRIDOR_METERS:15}
+    # 20 m é o valor OFICIAL da SMTR: segmento_shape.buffer_completo = "Área de 20m ao
+    # redor do segmento" (docs/regras-de-negocio.md §4.4). O ±15 m anterior não tinha
+    # origem em fonte nenhuma — era 25% mais estreito que o oficial.
+    corridor-meters: ${GPS_ROUTE_CORRIDOR_METERS:20}
     fallback-distance-threshold-meters: ${GPS_OUT_OF_ROUTE_DISTANCE_THRESHOLD_METERS:100}
     cache-ttl: ${GPS_ROUTE_SHAPE_CACHE_TTL:6h}
     empty-cache-ttl: ${GPS_ROUTE_SHAPE_EMPTY_CACHE_TTL:5m}

@@ -10,7 +10,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class RouteAdherenceEvaluatorTest {
 
-    private static final double CORRIDOR = 15.0;
+    /** Largura oficial da SMTR (segmento_shape.buffer_completo, §4.4). */
+    private static final double CORRIDOR = 20.0;
     private static final double FALLBACK = 100.0;
 
     private static Coordinates at(double lat, double lon) {

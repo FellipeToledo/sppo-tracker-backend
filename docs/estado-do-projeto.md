@@ -297,6 +297,37 @@ Duas frestas foram fechadas nesta rodada:
 significa "não constatado fora da rota". Quem precisa da distinção lê a tag. Trocar o
 booleano por tri-estado seria mudança de contrato na API — não fiz.
 
+### ⚠️ O corredor era inventado — corrigido para o valor oficial
+
+O `±15 m` do `GPS_ROUTE_CORRIDOR_METERS` **não tinha origem em fonte nenhuma**. A SMTR
+define o delimitador em `rj-smtr.planejamento.segmento_shape` (*"shapes segmentados usados
+na validação de viagens"*): `buffer_completo` = *"Área de **20 m** ao redor do segmento"*.
+Era 25% mais estreito que o oficial — inflando `OUT_OF_ROUTE`.
+
+Corrigido para **20 m** (§4.4/§8), com a origem citada no `application.yml` e uma regra
+nova na §9: **nenhum limiar sem origem rastreável no dado oficial**.
+
+**Falta a segunda metade** (fatia a implementar): a tabela também publica quais segmentos
+**não entram na validação** — `indicador_segmento_desconsiderado` (3.404 no feed vigente),
+`indicador_tunel` (1.868), `indicador_area_prejudicada` (398), `indicador_segmento_pequeno`
+(1.397). Hoje contamos todos como rota normal. Medido num shape real: excluir os
+desconsiderados reduz **15,1%** da área do corredor — é aí que está o falso `OUT_OF_ROUTE`,
+mais que na largura.
+
+Desenho decidido, com medição (2026-07-25, WKT médio por shape):
+
+| servir | custo | resolve o booleano? |
+|---|---|---|
+| shape inteiro (hoje) | 7,9 KB | sim, mas sem exclusões |
+| **linhas dos segmentos + flags** | **13,1 KB (1,65×)** | **sim, com exclusões** ← escolhido |
+| geometria dos buffers | 119 KB (15×), 160,8 MB total | sim, sem ganho |
+
+A união dos buffers **tratados** e dos **completos** tem área **idêntica (100,00%)** nos
+shapes mais segmentados — o tratamento remove sobreposição entre segmentos vizinhos, não
+área de rota. Logo, para "está na rota?", linha + 20 m é equivalente, e pagar 15× não se
+justifica. A geometria tratada só passa a ser obrigatória na **validação por segmento**
+(regras-de-negocio §11, registrada para o futuro).
+
 ### O que é "planejamento" (e de onde vem a regra)
 
 **`planejamento` é o nome do dataset** da SMTR no BigQuery: `rj-smtr.planejamento`. A regra
