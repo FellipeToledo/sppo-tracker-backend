@@ -158,11 +158,11 @@ tags).
 
 **IN_GARAGE** é atingido por geofence **ou** por código de serviço de garagem.
 
-**Origem dos polígonos de garagem:** derivados do histórico público de GPS da SMTR
-(`gps_sppo`, coluna `tipo_parada = 'garagem'`) por clusterização — a camada oficial
-`garagem_polygon` da SMTR é uma view sobre um projeto de staging sem acesso público.
-Query e limiares em `docs/sql/derive-garages.sql`; ressalvas do dado em
-`docs/estado-do-projeto.md` §10. São 35 polígonos, sem nome de empresa (a fonte não traz).
+**Origem dos polígonos de garagem:** dataset **oficial do data.rio** ("Garagens de
+operadores do SPPO"), empacotado em `resources/geofences/garages.geojson` — 37 polígonos
+com operador, endereço e bairro, nos limites reais do lote. O teste é
+**ponto-em-polígono** (ray casting), não bounding box: pátio real é côncavo. Borda conta
+como dentro. Lacuna medida e ressalvas em `docs/estado-do-projeto.md` §10.
 
 ### 4.4 Regra OUT_OF_ROUTE (resolução de geometria)
 - **Não confia no `shapeId` do payload** (vem trocado ida/volta com frequência).
@@ -316,6 +316,8 @@ das posições (ingestão, envio, servidor), resolução de shapes
 | `GPS_POLLING_FAILURE_COOLDOWN` | `5m` | duração do cooldown |
 | `GPS_CURRENT_SNAPSHOT_TTL` | `15m` | TTL do snapshot atual (> stale) |
 | `GPS_STALE_POSITION_THRESHOLD` | `5m` | idade p/ marcar STALE |
+| `GPS_GARAGE_GEOFENCE_ENABLED` | `true` | liga a regra `GARAGE_GEOFENCE` (§4.3) |
+| `GPS_GARAGE_GEOFENCE_RESOURCE` | `classpath:geofences/garages.geojson` | GeoJSON dos polígonos; aceita `file:/...` para atualizar sem rebuild |
 | `GPS_OUT_OF_ROUTE_DISTANCE_THRESHOLD_METERS` | `100` | fallback de distância ao traçado (shape degenerado) |
 | `ROUTE_SHAPE_SOURCE` | `disabled` | fonte de shapes: `gtfs-service`\|`disabled` (liga a regra OUT_OF_ROUTE) |
 | `GPS_ROUTE_CORRIDOR_METERS` | `15` | meia-largura do corredor do traçado |

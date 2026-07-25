@@ -1,15 +1,19 @@
--- Deriva os polígonos de garagem (GARAGE_GEOFENCE, docs/regras-de-negocio.md §4.3) a
--- partir do histórico público de GPS da SMTR, usando a própria classificação da SMTR
--- (`tipo_parada = 'garagem'`) como semente. Gera o `src/main/resources/garages.geojson`.
+-- ⚠️ ESTA NÃO É A FONTE DOS POLÍGONOS. A fonte é o dataset oficial do data.rio
+-- ("Garagens de operadores do SPPO"), empacotado em
+-- `src/main/resources/geofences/garages.geojson` — 37 polígonos com nome do operador,
+-- endereço e bairro, com os limites reais do lote.
 --
--- Por que assim: a camada oficial `rj-smtr.br_rj_riodejaneiro_geo.garagem_polygon` é uma
--- VIEW sobre `rj-smtr-staging`, que não é pública (Access Denied). Este SELECT reconstrói
--- os polígonos a partir dos pontos que a SMTR já rotulou como "em garagem".
+-- Este SELECT é uma FERRAMENTA DE CONFERÊNCIA: reconstrói, a partir do histórico
+-- público de GPS (`tipo_parada = 'garagem'`, a própria classificação da SMTR), os
+-- lugares onde a frota de fato para. Serve para responder "a camada oficial cobre o
+-- que a frota usa?" — e a resposta, medida em 2026-07-25, foi **não inteiramente**:
+-- dos 35 aglomerados encontrados, 21 caem dentro de uma garagem oficial e 14 não
+-- (o maior deles com 207 mil observações). Ver docs/estado-do-projeto.md §10.
 --
 -- Uso (SOMENTE SELECT; rode o dry-run antes — custo abaixo):
 --   projeto de billing: um projeto seu (o dataset rj-smtr é público)
 --   custo medido em 2026-07-25: 5,66 GiB varridos ≈ US$ 0,028 (30 dias de partição)
---   saída: 35 polígonos, 482 vértices, ~36 KB de GeoJSON
+--   saída: 35 aglomerados, 482 vértices em convex hulls
 --
 -- Parâmetros e por quê:
 --   ROUND(lat/lon, 4)  -> célula de ~11 m: colapsa milhões de pontos em milhares de células
@@ -22,9 +26,9 @@
 --   bbox do Rio        -> mesmo box de OUT_OF_MUNICIPALITY, que tem precedência sobre
 --                         IN_GARAGE (§4.2) — garagem fora do município seria inócua
 --
--- ⚠️ A geometria é o CONVEX HULL dos pontos observados: cobre o pátio de forma um pouco
--- generosa e pode fechar concavidades (pátio em L). Para apertar, trocar por união de
--- buffers das células — mais fiel, porém com muito mais vértices.
+-- ⚠️ A geometria daqui é CONVEX HULL dos pontos observados — generosa e sem concavidade.
+-- É boa para *localizar* onde a frota para, não para virar geofence: o polígono oficial
+-- do lote é mais fiel. Por isso este arquivo não alimenta a aplicação.
 WITH pts AS (
   SELECT ROUND(latitude, 4) AS la, ROUND(longitude, 4) AS lo, COUNT(*) AS n
   FROM `rj-smtr.br_rj_riodejaneiro_veiculos.gps_sppo`

@@ -265,53 +265,61 @@ nenhum bean é criado — comportamento inalterado.
 
 ---
 
-## 10. Próxima feature — geofence de garagem (`GARAGE_GEOFENCE`, §4.3)
+## 10. Fatia D — geofence de garagem (`GARAGE_GEOFENCE`, §4.3)
 
-Terreno preparado; **nada implementado ainda**. O que já existe a favor:
+Regra de garagem por **localização**, não só por código de serviço: pega o ônibus
+recolhido que continua transmitindo linha operacional. **Fatias 1–4 entregues**
+(mecanismo completo e ligado); faltam o endpoint e o mapa.
 
-- A tag **`GARAGE_GEOFENCE` já existe** em `ClassificationTag` e a **precedência já
-  está pronta** no `PositionClassifier`: `IN_GARAGE || GARAGE_GEOFENCE` ⇒ status
-  `IN_GARAGE` (3º na ordem, §4.2). As flags §4.5 (`insideGarage`) também já cobrem.
-- Existe **padrão a copiar** para dado empacotado: `PackagedOperatorDirectory`
-  (+ `OperatorDirectoryPort`, `OperatorConfig`) carrega JSON de `resources/` no boot.
-- Existe **geometria pronta a reusar** em `domain/route/Geo` (haversine, distância
-  ponto→segmento) e o padrão de pré-filtro por bounding box em `RoutePath`.
+### Fonte dos polígonos
 
-**Peças a criar (ordem sugerida, TDD):**
+**Dataset oficial do data.rio** — "Garagens de operadores do SPPO no Município do Rio
+de Janeiro" — empacotado em **`src/main/resources/geofences/garages.geojson`**:
+**37 polígonos**, 652 vértices, ~36 KB, com `garage_id`, `garage_name` (operador),
+`endereco` e `bairro`. São os **limites reais do lote**.
 
-1. `domain/vehicle/GaragePolygon` (ou `domain/geo/`): polígono imutável auto-validado
-   + **ponto-em-polígono** (ray casting) com **pré-filtro por bbox** — teste primeiro.
-2. `GarageGeofenceRule implements ClassificationRule` → devolve `GARAGE_GEOFENCE`
-   quando a coordenada cai em qualquer polígono; **neutra** sem polígonos carregados
-   (mesmo contrato defensivo da `OutOfRouteRule`).
-3. Porta `GarageDirectoryPort` (out) + `PackagedGarageDirectory` lendo
-   `resources/garages.geojson` (FeatureCollection de `Polygon`/`MultiPolygon`).
-4. Wiring em `ClassificationConfig` + propriedades `gps.geofence.garages.*`
-   (`enabled`, caminho do arquivo) — **desligado por default** enquanto não houver
-   polígonos reais, para não mudar a classificação atual.
-5. `GET /api/v1/garages` (§7.1) devolvendo nome + geometria; destaque opcional no mapa.
-6. Atualizar `docs/regras-de-negocio.md` §4.3/§7.1/§8 e este documento no mesmo PR.
+Caminhos descartados na investigação (2026-07-25), para não se repetir:
+- `rj-smtr.br_rj_riodejaneiro_geo.garagem_polygon` (a camada da SMTR no BigQuery) é uma
+  **VIEW sobre `rj-smtr-staging`** → `Access Denied`. Nada equivalente em `datario`.
+- **Derivar por clusterização** do histórico de GPS (`gps_sppo.tipo_parada = 'garagem'`)
+  funciona, mas entrega *convex hulls* generosos e sem nome de operador — pior geofence
+  que o lote oficial. A query ficou no repo como **conferência**, não como fonte:
+  `docs/sql/derive-garages.sql`.
 
-**Pré-requisito de dados: RESOLVIDO** — `src/main/resources/garages.geojson` já está no
-repo (35 polígonos, 482 vértices, ~36 KB).
+⚠️ **Lacuna conhecida, medida:** cruzando os 35 aglomerados derivados do GPS com as 37
+garagens oficiais, **21 caem dentro de uma garagem oficial e 14 não** — o maior deles com
+207 mil observações em 30 dias. Ou são pontos finais/terminais, ou garagens que entraram
+depois da camada (que é de 2021). Enquanto isso, esses veículos seguem classificados por
+código de serviço. Reavaliar quando houver uma camada mais nova.
 
-O que foi investigado (2026-07-25):
-- A camada **oficial** `rj-smtr.br_rj_riodejaneiro_geo.garagem_polygon` existe, mas é uma
-  **VIEW sobre `rj-smtr-staging`**, que não é público → `Access Denied`. Descartada.
-- Nada equivalente em `datario.dados_mestres` / `transporte_rodoviario_municipal`.
-- ✅ **Fonte adotada:** o histórico público `rj-smtr.br_rj_riodejaneiro_veiculos.gps_sppo`
-  tem a coluna **`tipo_parada`**, que é a *própria classificação da SMTR* de veículo parado
-  em garagem/terminal. Filtrando `tipo_parada = 'garagem'` e clusterizando os pontos
-  reconstruímos as geofences: grid de ~11 m → `ST_CLUSTERDBSCAN(80 m, 5)` → `ST_CONVEXHULL`.
-  Query comentada (com o porquê de cada limiar) em **`docs/sql/derive-garages.sql`**.
+### O que foi implementado (fatias 1–4)
 
-Números medidos: 30 dias de partição = 5,66 GiB varridos ≈ **US$ 0,028**; 5,1 M pontos de
-`garagem`/semana em ~3,9 mil veículos; 45 clusters brutos → **35** após os filtros de
-densidade e área (10 mil–110 mil m² nas maiores, compatível com pátio de ônibus).
+| Camada | Peça | Papel |
+|---|---|---|
+| `domain/geofence` | `GarageArea` | polígono imutável + bbox derivada; `contains()` por **ray casting** com pré-filtro de bbox. Ray casting (não bbox/hull) porque pátio real é côncavo. **Borda conta como dentro** (decisão explícita). |
+| `domain/vehicle` | `GarageGeofenceRule` | tag `GARAGE_GEOFENCE`; **neutra** sem polígonos; (0,0) nunca vira garagem |
+| `application/port/out` | `GarageGeofencePort` | lista de áreas; dado estático, lido no boot |
+| `infrastructure/.../out/geofence` | `GeoJsonGarageGeofenceAdapter` | lê o GeoJSON (`Polygon` e `MultiPolygon`, ordem `[lon, lat]`, só o anel externo). Arquivo ilegível ⇒ **falha na inicialização**; *feature* inválida isolada ⇒ descartada com aviso. Loga `Loaded garage geofences. count=37`. |
+| `infrastructure/config` | `GarageGeofenceConfig` + `GarageGeofenceProperties` | wiring condicional; a regra entra no `PositionClassifier` via `ObjectProvider`, como a `OutOfRouteRule` |
 
-⚠️ Ressalvas do dado: (1) a geometria é *convex hull* dos pontos observados — cobre o pátio
-de forma um pouco generosa e fecha concavidades; (2) a tabela estava defasada (última
-partição **2026-04-29**), o que é irrelevante para garagem, mas significa que garagem nova
-só aparece após a SMTR publicar; (3) sem nome/empresa por polígono (a fonte não traz) — os
-IDs são `g00…g34`. Como `IN_GARAGE` tem precedência alta (§4.2), começar com a regra
-**desligada por default** e conferir no mapa antes de ligar.
+**Flag / default:** `GPS_GARAGE_GEOFENCE_ENABLED` (default **true** — o dado é o lote
+oficial, e a regra só *acrescenta* precisão ao `IN_GARAGE` que já vinha do código de
+serviço). `GPS_GARAGE_GEOFENCE_RESOURCE` aceita `file:/...`, então dá para atualizar as
+garagens num deploy montando o arquivo, **sem rebuild**. Com `enabled=false` nenhum bean
+é criado e o comportamento volta a ser o anterior.
+
+**Testes:** 23 novos (total do repo: **223**, verdes). `GarageAreaTest` cobre dentro,
+fora, **borda**, vértice, pré-filtro de bbox, **concavidade em L**, anel aberto e anel
+degenerado; `GarageGeofenceRuleTest` cobre a tag independente do código de serviço e a
+integração das regras reais (`serviceCode` operacional dentro do pátio ⇒ `IN_GARAGE`,
+`insideGarage=true`, `onRoute=false`); `GeoJsonGarageGeofenceAdapterTest` roda contra o
+**arquivo real** (37 áreas, ponto conhecido dentro da Braso Lisboa, Copacabana fora,
+ordem lon/lat, `MultiPolygon`, *feature* inválida, fail-fast).
+
+### Falta (fatias 5–6)
+
+- `GET /api/v1/garages` (§7.1) devolvendo nome + geometria, e destaque no mapa.
+- Expor o nome da garagem na resposta REST/WebSocket da posição (hoje só a tag).
+- Métrica por garagem, se houver necessidade operacional.
+- Conferir no mapa antes de considerar a regra calibrada — e revisitar os 14 pontos de
+  parada sem cobertura oficial.
