@@ -28,7 +28,7 @@ scheduler → readiness → cooldown → janela [now-90s, now] → fetch (provid
   `spring-boot-starter-webmvc-test` (o `@WebMvcTest` mudou para
   `org.springframework.boot.webmvc.test.autoconfigure`). Annotations Jackson
   permanecem em `com.fasterxml.jackson.annotation`.
-- **Testes:** `mvn --batch-mode test` → **253 testes, 0 falhas** (todos herméticos:
+- **Testes:** `mvn --batch-mode test` → **256 testes, 0 falhas** (todos herméticos:
   sem Redis/Postgres/rede reais — usam mocks, `SimpleMeterRegistry`, MockWebServer,
   `@WebMvcTest`). Os de integração (Testcontainers) rodam no `mvn verify` / CI.
 - **Estado do git (2026-07-25):** `main` tem as fatias A/B/C + stack de deploy (PR #11

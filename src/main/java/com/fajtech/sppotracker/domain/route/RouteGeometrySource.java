@@ -23,11 +23,14 @@ public interface RouteGeometrySource {
      *
      * <p>Não dispara resolução: é leitura pura, para o hot path.
      *
-     * <p>O default é <b>conservador</b> ({@code PENDING} quando vazio): quem não sabe
-     * distinguir nunca afirma que a linha está fora do planejamento.
+     * <p>O default é <b>conservador</b>: sempre {@code PENDING}. Quem não sabe distinguir
+     * nunca afirma que a linha está fora do planejamento. Não consulta {@link #pathsFor}
+     * — isso agendaria resolução (o cache o faz) e faria uma segunda busca no hot path,
+     * quebrando o próprio contrato deste método. O chamador só pergunta quando
+     * {@code pathsFor} já veio vazio, então {@code RESOLVED} não é resposta útil aqui.
      */
     default Availability availabilityFor(String serviceCode) {
-        return pathsFor(serviceCode).isEmpty() ? Availability.PENDING : Availability.RESOLVED;
+        return Availability.PENDING;
     }
 
     enum Availability {

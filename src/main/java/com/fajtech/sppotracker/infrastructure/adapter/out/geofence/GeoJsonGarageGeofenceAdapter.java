@@ -46,6 +46,7 @@ public class GeoJsonGarageGeofenceAdapter implements GarageGeofencePort {
     @PostConstruct
     public void load() {
         JsonNode root = read();
+        requireFeatureCollection(root);
         List<GarageArea> parsed = new ArrayList<>();
         int skipped = 0;
         for (JsonNode feature : root.path("features")) {
@@ -66,6 +67,19 @@ public class GeoJsonGarageGeofenceAdapter implements GarageGeofencePort {
     @Override
     public List<GarageArea> garages() {
         return garages;
+    }
+
+    /**
+     * Documento JSON válido mas que não é um {@code FeatureCollection} (ex.: {@code {}})
+     * produziria zero garagens <b>em silêncio</b> — desligando o {@code IN_GARAGE} e o
+     * endpoint sem ninguém notar. É dado empacotado: erro de build, falha na inicialização.
+     */
+    private void requireFeatureCollection(JsonNode root) {
+        if (!"FeatureCollection".equals(root.path("type").asString())
+                || !root.path("features").isArray()) {
+            throw new IllegalStateException("GeoJSON de garagens inválido em "
+                    + resource.getFilename() + ": esperado FeatureCollection com 'features' array");
+        }
     }
 
     private JsonNode read() {

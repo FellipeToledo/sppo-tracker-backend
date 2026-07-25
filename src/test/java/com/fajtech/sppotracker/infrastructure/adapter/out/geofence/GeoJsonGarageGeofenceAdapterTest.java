@@ -125,6 +125,25 @@ class GeoJsonGarageGeofenceAdapterTest {
     }
 
     @Test
+    void shouldFailFastWhenTheDocumentIsNotAFeatureCollection() {
+        // JSON válido mas estrutura errada produziria ZERO garagens em silêncio,
+        // desligando o IN_GARAGE e o endpoint sem ninguém notar. É dado empacotado.
+        assertThatThrownBy(() -> adapterFor("{}"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("FeatureCollection");
+
+        assertThatThrownBy(() -> adapterFor("{\"type\":\"FeatureCollection\",\"features\":{}}"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("FeatureCollection");
+    }
+
+    @Test
+    void shouldAcceptAnEmptyButWellFormedCollection() {
+        // Coleção vazia é legítima (geofence sem polígonos): a regra fica neutra.
+        assertThat(adapterFor("{\"type\":\"FeatureCollection\",\"features\":[]}").garages()).isEmpty();
+    }
+
+    @Test
     void shouldFailFastWhenTheResourceCannotBeRead() {
         var broken = new GeoJsonGarageGeofenceAdapter(
                 new ClassPathResource("geofences/nao-existe.geojson"),

@@ -124,18 +124,29 @@ public record GarageArea(String id, String name, String address, String neighbor
         for (int i = 0; i < ring.size() - 1; i++) {
             double y1 = ring.get(i).latitude().doubleValue();
             double x1 = ring.get(i).longitude().doubleValue();
-            double y2 = ring.get(i + 1).latitude().doubleValue();
-            double x2 = ring.get(i + 1).longitude().doubleValue();
-            double cross = (x2 - x1) * (y - y1) - (y2 - y1) * (x - x1);
-            if (Math.abs(cross) > ON_EDGE_EPSILON) {
+            double dx = ring.get(i + 1).longitude().doubleValue() - x1;
+            double dy = ring.get(i + 1).latitude().doubleValue() - y1;
+            double lengthSquared = dx * dx + dy * dy;
+            if (lengthSquared == 0.0) {
+                // Vértice repetido: degenera em ponto.
+                if (Math.hypot(x - x1, y - y1) <= ON_EDGE_EPSILON) {
+                    return true;
+                }
                 continue;
             }
-            double dot = (x - x1) * (x2 - x1) + (y - y1) * (y2 - y1);
-            if (dot < -ON_EDGE_EPSILON) {
+            // Projeção normalizada: fora de [0,1] o ponto não está sobre ESTE segmento
+            // (um vértice compartilhado é coberto pela aresta vizinha).
+            double t = ((x - x1) * dx + (y - y1) * dy) / lengthSquared;
+            if (t < 0.0 || t > 1.0) {
                 continue;
             }
-            double lengthSquared = (x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1);
-            if (dot <= lengthSquared + ON_EDGE_EPSILON) {
+            // Distância perpendicular REAL, em graus. Dividir pelo comprimento é o
+            // ponto crítico: o produto vetorial está em graus², então compará-lo direto
+            // com a tolerância dava folga proporcional a 1/comprimento — numa aresta de
+            // 0,83 m (existe no dataset real) a folga virava ~15 m, e ônibus fora do lote
+            // era classificado como dentro da garagem.
+            double distance = Math.abs(dx * (y - y1) - dy * (x - x1)) / Math.sqrt(lengthSquared);
+            if (distance <= ON_EDGE_EPSILON) {
                 return true;
             }
         }

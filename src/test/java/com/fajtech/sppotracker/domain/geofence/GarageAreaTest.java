@@ -66,6 +66,27 @@ class GarageAreaTest {
     }
 
     @Test
+    void shouldNotTreatAPointMetresAwayFromAShortEdgeAsOnBoundary() {
+        // Regressão: a tolerância de borda era comparada contra o produto vetorial, que
+        // está em graus² — logo, quanto MAIS CURTA a aresta, MAIOR a distância tolerada.
+        // O dataset real tem aresta de 0,83 m, o que dava ~15 m de folga: ônibus fora do
+        // lote virava IN_GARAGE. A tolerância tem de ser distância perpendicular real.
+        GarageArea comArestaCurta = GarageArea.of("g6", "Pátio com aresta curta", List.of(
+                c(-22.90, -43.20),
+                c(-22.90, -43.18),
+                c(-22.8950, -43.18),
+                c(-22.8950, -43.19),
+                c(-22.89499, -43.19),   // aresta de 1e-5° (~1,1 m)
+                c(-22.89, -43.19),
+                c(-22.89, -43.20)));
+
+        // ~5,7 m a leste da aresta curta: dentro da bounding box, fora do polígono.
+        assertThat(comArestaCurta.contains(c(-22.89499, -43.189949))).isFalse();
+        // E o ponto sobre a aresta continua contando como dentro.
+        assertThat(comArestaCurta.contains(c(-22.894995, -43.19))).isTrue();
+    }
+
+    @Test
     void shouldCloseAnOpenRing() {
         GarageArea open = GarageArea.of("g3", "Anel aberto", List.of(
                 c(-22.90, -43.20),

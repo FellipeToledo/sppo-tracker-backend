@@ -225,8 +225,13 @@ Além do status, a classificação expõe booleans para consumo/filtragem:
 
 ⚠️ **`onRoute` é booleano e não sabe dizer "não sei".** Leia junto com as tags: com
 `ROUTE_NOT_PLANNED` presente, `onRoute=true` significa apenas *"não foi constatado fora da
-rota"*. E como o caso transitório não é rotulado, a ausência da tag também não garante
-"conferido na rota" — garante apenas que a linha tem itinerário no feed.
+rota"*.
+
+⚠️ **A ausência de `ROUTE_NOT_PLANNED` não afirma nada.** Não significa "conferido na rota"
+nem "a linha tem itinerário": também não há tag quando a geometria ainda estava resolvendo
+(estado interno `PENDING`, §4.4) **nem quando `ROUTE_SHAPE_SOURCE=disabled`**, caso em que a
+regra nem é montada e nenhuma posição é avaliada. Sem a tag, a aderência é simplesmente
+**desconhecida**.
 
 | Status | valid | insideMunicipality | insideGarage | onRoute |
 |---|---|---|---|---|
