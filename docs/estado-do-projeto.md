@@ -307,26 +307,23 @@ Era 25% mais estreito que o oficial — inflando `OUT_OF_ROUTE`.
 Corrigido para **20 m** (§4.4/§8), com a origem citada no `application.yml` e uma regra
 nova na §9: **nenhum limiar sem origem rastreável no dado oficial**.
 
-**Falta a segunda metade** (fatia a implementar): a tabela também publica quais segmentos
-**não entram na validação** — `indicador_segmento_desconsiderado` (3.404 no feed vigente),
-`indicador_tunel` (1.868), `indicador_area_prejudicada` (398), `indicador_segmento_pequeno`
-(1.397). Hoje contamos todos como rota normal. Medido num shape real: excluir os
-desconsiderados reduz **15,1%** da área do corredor — é aí que está o falso `OUT_OF_ROUTE`,
-mais que na largura.
+**A regra do corredor está completa com isso — não há segunda metade.** Eu tinha concluído
+que os flags de exclusão de segmento (`indicador_segmento_desconsiderado`,
+`indicador_segmento_pequeno`, `indicador_tunel`, `indicador_area_prejudicada`) deviam
+suprimir `OUT_OF_ROUTE`, e **estava errado**: eles pertencem à **validação de viagem**
+(§11), onde a pergunta é "o veículo cumpriu este segmento?". Aqui a pergunta é geométrica —
+**um trecho continua sendo itinerário mesmo que a SMTR não o valide como segmento**. O
+corredor é o shape inteiro a 20 m, sem exclusão.
 
-Desenho decidido, com medição (2026-07-25, WKT médio por shape):
+O que me levou ao erro: medi que excluir os desconsiderados reduz 15,1% da área do corredor
+e usei o **impacto** como se fosse prova de correção. O dado nunca disse "use no corredor";
+a descrição da coluna diz, literalmente, *"deve ser desconsiderado na **validação de
+viagens**"*. Dado que corrobora a leitura certa: são **1.397** segmentos pequenos para
+**1.383** shapes — ~1 por shape, a sobra do corte de ~1 km (média 981 m). Excluí-los
+cortaria a ponta final de quase toda linha.
 
-| servir | custo | resolve o booleano? |
-|---|---|---|
-| shape inteiro (hoje) | 7,9 KB | sim, mas sem exclusões |
-| **linhas dos segmentos + flags** | **13,1 KB (1,65×)** | **sim, com exclusões** ← escolhido |
-| geometria dos buffers | 119 KB (15×), 160,8 MB total | sim, sem ganho |
-
-A união dos buffers **tratados** e dos **completos** tem área **idêntica (100,00%)** nos
-shapes mais segmentados — o tratamento remove sobreposição entre segmentos vizinhos, não
-área de rota. Logo, para "está na rota?", linha + 20 m é equivalente, e pagar 15× não se
-justifica. A geometria tratada só passa a ser obrigatória na **validação por segmento**
-(regras-de-negocio §11, registrada para o futuro).
+A geometria tratada (`buffer`) e os flags seguem registrados na §11 das regras de negócio,
+para a fatia de validação por segmento. Custo já orçado lá: 119 KB/shape, 160,8 MB no total.
 
 ### O que é "planejamento" (e de onde vem a regra)
 

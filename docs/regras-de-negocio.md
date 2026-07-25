@@ -180,32 +180,35 @@ como dentro. Lacuna medida e ressalvas em `docs/estado-do-projeto.md` §10.
 
 ### 4.4 Regra OUT_OF_ROUTE (resolução de geometria)
 - **Não confia no `shapeId` do payload** (vem trocado ida/volta com frequência).
-- **O corredor é definido pela SMTR, não por nós.** A fonte é
-  `rj-smtr.planejamento.segmento_shape` — pela própria descrição da tabela, *"shapes
-  segmentados usados na **validação de viagens**"*. Dela vêm **duas** coisas:
-  - **Largura: 20 m.** Coluna `buffer_completo` — *"Área de 20 m ao redor do segmento"*.
-    É o valor oficial; `GPS_ROUTE_CORRIDOR_METERS` existe para ajuste operacional, **não**
-    para inventar largura (ver §9).
-  - **Segmentos que não entram na validação**, por flag: `indicador_segmento_desconsiderado`
-    (*"deve ser desconsiderado na validação de viagens"*), `indicador_tunel` (GPS não é
-    confiável em túnel), `indicador_area_prejudicada` (buffer perdeu >50% da área no
-    tratamento) e `indicador_segmento_pequeno` (< 990 m). **Posição sobre segmento
-    excluído não produz `OUT_OF_ROUTE`.**
+- **A largura do corredor é definida pela SMTR: 20 m.** Fonte:
+  `rj-smtr.planejamento.segmento_shape`, coluna `buffer_completo` — *"Área de 20 m ao redor
+  do segmento"*. É o valor oficial; `GPS_ROUTE_CORRIDOR_METERS` existe para ajuste
+  operacional, **não** para inventar largura (ver §9).
+- ⚠️ **Os flags de exclusão de segmento NÃO entram nesta regra.**
+  `indicador_segmento_desconsiderado`, `indicador_segmento_pequeno` (< 990 m),
+  `indicador_tunel` e `indicador_area_prejudicada` pertencem à **validação de viagem**
+  (§11), onde a pergunta é *"o veículo cumpriu este segmento?"* — e aí faz sentido
+  descartar trecho curto demais para afirmar percurso. Aqui a pergunta é **geométrica**:
+  a posição está sobre o itinerário ou não. **Um trecho continua sendo itinerário mesmo
+  que a SMTR não o valide como segmento** — logo, o corredor é o **shape inteiro**, sem
+  exclusão alguma.
+  *Corroborando:* são **1.397** segmentos "pequenos" para **1.383** shapes — praticamente
+  um por shape. É a sobra do último trecho, já que a SMTR corta em pedaços de ~1 km
+  (comprimento médio **981 m**). Excluí-los do corredor tiraria a ponta final de quase
+  toda linha.
 - **Preferencial:** resolve **todos os shapes** da linha pelo `serviceCode` e testa a
-  posição contra o corredor de 20 m dos **segmentos não excluídos** de cada shape.
+  posição contra o corredor de 20 m de cada um (traçado completo).
   - Está "na rota" se cair no corredor de **qualquer** shape.
   - É `OUT_OF_ROUTE` só se estiver fora de **todos** os shapes resolvidos.
-- **Por que não carregamos a geometria do buffer** (`buffer`/`buffer_completo`), e sim a
-  linha do segmento + a largura de 20 m: medido em 2026-07-25 no feed vigente, a **união**
-  dos buffers tratados e a dos completos têm **área idêntica (100,00%)** nos shapes mais
-  segmentados — o tratamento remove sobreposição *entre segmentos vizinhos*, não área de
-  rota. Para a pergunta booleana "está na rota?" as duas dão a mesma resposta, e distância
-  ≤ 20 m à linha do segmento é, por definição, o buffer completo. Custo comparado (WKT
-  médio por shape): shape inteiro **7,9 KB** · linhas segmentadas **13,1 KB (1,65×)** ·
-  buffers **119,0 KB (15×)**, num total de 160,8 MB e ~4,6 M vértices. Pagar 15× para
-  obter o mesmo booleano não se justifica. ⚠️ **A geometria tratada passa a ser obrigatória
-  se/quando entrar a validação por segmento** (§11) — lá a atribuição ponto→segmento
-  depende justamente do tratamento.
+- **Por que não carregamos a geometria do buffer** (`buffer`/`buffer_completo`), e sim o
+  traçado + a largura de 20 m: distância ≤ 20 m ao traçado é, por definição, o buffer
+  completo. E medido em 2026-07-25 no feed vigente, a **união** dos buffers tratados e a
+  dos completos têm **área idêntica (100,00%)** nos shapes mais segmentados — o tratamento
+  remove sobreposição *entre segmentos vizinhos*, não área de rota. Custo comparado (WKT
+  médio por shape): shape inteiro **7,9 KB** · buffers **119,0 KB (15×)**, num total de
+  160,8 MB e ~4,6 M vértices. ⚠️ **A geometria tratada passa a ser obrigatória se/quando
+  entrar a validação por segmento** (§11) — lá a atribuição ponto→segmento depende
+  justamente do tratamento.
 - **Fallback (sem `routeId` ou fonte indisponível):** usa o `shapeId` do payload
   — corredor; sem corredor, distância ao traçado cru comparada ao limiar
   (default **100 m**).
@@ -508,7 +511,13 @@ comprimento médio **981 m**.
 | `indicador_area_prejudicada` | buffer perdeu >50% da área no tratamento (398) |
 | `indicador_segmento_pequeno` | segmento < 990 m (1.397) |
 
-⚠️ **Aqui o `buffer` tratado é obrigatório** — e é a diferença em relação à §4.4. Para o
+⚠️ **É aqui — e só aqui — que os flags de exclusão valem.** `indicador_segmento_pequeno`
+(< 990 m) e o `indicador_segmento_desconsiderado` que ele alimenta existem porque não se
+afirma que um trecho curto foi *percorrido*; isso é critério de **contagem de segmento
+cumprido**, não de estar ou não no itinerário. A §4.4 não os usa: lá o corredor é o shape
+inteiro.
+
+⚠️ **Aqui o `buffer` tratado é obrigatório** — e é a segunda diferença em relação à §4.4. Para o
 booleano "está na rota", medimos que a **união** dos buffers tratados e a dos completos têm
 área idêntica (100,00%), então a linha + 20 m basta. Mas para **atribuir** um ponto a **um**
 segmento — que é o que a contagem exige — o tratamento é justamente o que remove a
