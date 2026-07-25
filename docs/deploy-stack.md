@@ -85,3 +85,19 @@ acompanha o `mem_limit`. Ajuste os limites conforme o host.
 git -C ../sppo-gtfs-service pull && git pull
 docker compose -f docker-compose.stack.yml --env-file .env.stack up -d --build
 ```
+
+## Troubleshooting
+
+- **`FATAL: password authentication failed for user "sppotracker"`** (backend em loop de
+  restart): o volume do Postgres foi criado num run anterior com **outra** senha. O Postgres
+  só aplica `POSTGRES_PASSWORD` na **primeira** inicialização do volume; mudar `DB_PASSWORD`
+  depois não re-senha o banco existente. Corrija resetando os volumes (dado de teste):
+  ```bash
+  docker compose -f docker-compose.stack.yml --env-file .env.stack down -v
+  docker compose -f docker-compose.stack.yml --env-file .env.stack up -d --build
+  ```
+  Em produção (dado real), em vez de apagar, mantenha o `DB_PASSWORD` estável ou altere a
+  senha no próprio Postgres (`ALTER USER`).
+- **Este e o `docker-compose.yml` (standalone) compartilham os volumes** quando rodados da
+  mesma pasta (mesmo nome de projeto). Se alternar entre os dois com senhas diferentes,
+  ocorre o erro acima.
