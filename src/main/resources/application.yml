@@ -55,6 +55,7 @@ gps:
     corridor-meters: ${GPS_ROUTE_CORRIDOR_METERS:15}
     fallback-distance-threshold-meters: ${GPS_OUT_OF_ROUTE_DISTANCE_THRESHOLD_METERS:100}
     cache-ttl: ${GPS_ROUTE_SHAPE_CACHE_TTL:6h}
+    empty-cache-ttl: ${GPS_ROUTE_SHAPE_EMPTY_CACHE_TTL:5m}
     refresh-pool-size: ${GPS_ROUTE_REFRESH_POOL_SIZE:2}
     refresh-queue-capacity: ${GPS_ROUTE_REFRESH_QUEUE_CAPACITY:500}
     # Máquina de desvio de itinerário (docs/regras-de-negocio.md §5). Só atua com

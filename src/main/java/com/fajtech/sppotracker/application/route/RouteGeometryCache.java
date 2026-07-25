@@ -30,7 +30,9 @@ import java.util.concurrent.RejectedExecutionException;
  *   <li>uma resolução por chave por vez (dedup {@code inFlight}); sob pico, se o
  *       executor rejeitar, a tentativa é descartada e re-tentada no próximo tick;</li>
  *   <li>resultados autoritativos vazios também são cacheados (evita marteladas em
- *       linhas sem geometria).</li>
+ *       linhas sem geometria), mas com TTL <b>curto</b> ({@code emptyTtl}): assim uma
+ *       indisponibilidade momentânea do gtfs-service (que responde "não encontrada"
+ *       para tudo enquanto o índice não carregou) não congela as linhas pelo TTL longo.</li>
  * </ul>
  */
 public final class RouteGeometryCache implements RouteGeometrySource {
@@ -39,16 +41,18 @@ public final class RouteGeometryCache implements RouteGeometrySource {
     private final Executor refreshExecutor;
     private final Clock clock;
     private final Duration ttl;
+    private final Duration emptyTtl;
 
     private final Map<String, Entry> cache = new ConcurrentHashMap<>();
     private final Set<String> inFlight = ConcurrentHashMap.newKeySet();
 
     public RouteGeometryCache(ResolveRouteShapesPort port, Executor refreshExecutor,
-                              Clock clock, Duration ttl) {
+                              Clock clock, Duration ttl, Duration emptyTtl) {
         this.port = Objects.requireNonNull(port, "port");
         this.refreshExecutor = Objects.requireNonNull(refreshExecutor, "refreshExecutor");
         this.clock = Objects.requireNonNull(clock, "clock");
         this.ttl = Objects.requireNonNull(ttl, "ttl");
+        this.emptyTtl = Objects.requireNonNull(emptyTtl, "emptyTtl");
     }
 
     @Override
@@ -65,7 +69,8 @@ public final class RouteGeometryCache implements RouteGeometrySource {
     }
 
     private boolean isStale(Entry entry) {
-        return Duration.between(entry.resolvedAt(), clock.instant()).compareTo(ttl) >= 0;
+        Duration effectiveTtl = entry.paths().isEmpty() ? emptyTtl : ttl;
+        return Duration.between(entry.resolvedAt(), clock.instant()).compareTo(effectiveTtl) >= 0;
     }
 
     private void scheduleRefresh(String rawServiceCode, String key) {

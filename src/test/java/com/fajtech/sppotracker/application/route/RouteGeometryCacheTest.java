@@ -36,7 +36,7 @@ class RouteGeometryCacheTest {
             calls.incrementAndGet();
             return Optional.of(new ResolvedShapes("2026-07", List.of(segment())));
         };
-        RouteGeometryCache cache = new RouteGeometryCache(port, DIRECT, Clock.systemUTC(), Duration.ofHours(6));
+        RouteGeometryCache cache = new RouteGeometryCache(port, DIRECT, Clock.systemUTC(), Duration.ofHours(6), Duration.ofMinutes(5));
 
         assertThat(cache.pathsFor("100")).isEmpty();      // dispara o refresh em background
         assertThat(cache.pathsFor("100")).hasSize(1);      // já resolvido em cache
@@ -50,7 +50,7 @@ class RouteGeometryCacheTest {
             calls.incrementAndGet();
             return Optional.empty();                        // falha transitória
         };
-        RouteGeometryCache cache = new RouteGeometryCache(port, DIRECT, Clock.systemUTC(), Duration.ofHours(6));
+        RouteGeometryCache cache = new RouteGeometryCache(port, DIRECT, Clock.systemUTC(), Duration.ofHours(6), Duration.ofMinutes(5));
 
         assertThat(cache.pathsFor("100")).isEmpty();
         assertThat(cache.pathsFor("100")).isEmpty();
@@ -66,7 +66,7 @@ class RouteGeometryCacheTest {
             calls.incrementAndGet();
             return Optional.of(new ResolvedShapes("2026-07", List.of(segment())));
         };
-        RouteGeometryCache cache = new RouteGeometryCache(port, DIRECT, clock, Duration.ofHours(6));
+        RouteGeometryCache cache = new RouteGeometryCache(port, DIRECT, clock, Duration.ofHours(6), Duration.ofMinutes(5));
 
         cache.pathsFor("100");                              // resolve #1
         assertThat(cache.pathsFor("100")).hasSize(1);
@@ -78,13 +78,35 @@ class RouteGeometryCacheTest {
     }
 
     @Test
+    void shouldReResolveEmptyResultAfterShortEmptyTtl() {
+        // Resultado autoritativo VAZIO (ex.: gtfs sem índice → "não encontrada") deve
+        // expirar pelo emptyTtl curto, não pelo cacheTtl longo.
+        AtomicReference<Instant> now = new AtomicReference<>(Instant.parse("2026-07-23T12:00:00Z"));
+        Clock clock = new MovableClock(now);
+        AtomicInteger calls = new AtomicInteger();
+        ResolveRouteShapesPort port = service -> {
+            calls.incrementAndGet();
+            return Optional.of(ResolvedShapes.empty("2026-07"));
+        };
+        RouteGeometryCache cache = new RouteGeometryCache(port, DIRECT, clock, Duration.ofHours(6), Duration.ofMinutes(5));
+
+        cache.pathsFor("100");                              // resolve #1 (vazio, cacheado com TTL curto)
+        cache.pathsFor("100");                              // ainda fresco → sem nova resolução
+        assertThat(calls.get()).isEqualTo(1);
+
+        now.set(now.get().plus(Duration.ofMinutes(6)));     // passou o emptyTtl (5m), mas < cacheTtl (6h)
+        cache.pathsFor("100");                              // re-resolve por causa do TTL curto de vazio
+        assertThat(calls.get()).isEqualTo(2);
+    }
+
+    @Test
     void shouldTreatDifferentLeadingZeroCodesAsSameCacheKey() {
         AtomicInteger calls = new AtomicInteger();
         ResolveRouteShapesPort port = service -> {
             calls.incrementAndGet();
             return Optional.of(new ResolvedShapes("2026-07", List.of(segment())));
         };
-        RouteGeometryCache cache = new RouteGeometryCache(port, DIRECT, Clock.systemUTC(), Duration.ofHours(6));
+        RouteGeometryCache cache = new RouteGeometryCache(port, DIRECT, Clock.systemUTC(), Duration.ofHours(6), Duration.ofMinutes(5));
 
         cache.pathsFor("0100");
         assertThat(cache.pathsFor("100")).hasSize(1);        // mesma chave normalizada

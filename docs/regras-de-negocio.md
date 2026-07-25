@@ -310,6 +310,7 @@ das posições (ingestão, envio, servidor), resolução de shapes
 | `ROUTE_SHAPE_SOURCE` | `disabled` | fonte de shapes: `gtfs-service`\|`disabled` (liga a regra OUT_OF_ROUTE) |
 | `GPS_ROUTE_CORRIDOR_METERS` | `15` | meia-largura do corredor do traçado |
 | `GPS_ROUTE_SHAPE_CACHE_TTL` | `6h` | validade da geometria em cache antes de re-resolver |
+| `GPS_ROUTE_SHAPE_EMPTY_CACHE_TTL` | `5m` | TTL curto p/ resultado vazio (gtfs sem índice não congela linhas) |
 | `GPS_ROUTE_REFRESH_POOL_SIZE` / `_QUEUE_CAPACITY` | `2` / `500` | executor bounded de resolução em background |
 | `SPPO_GTFS_BASE_URL` | `http://localhost:8081` | URL do `sppo-gtfs-service` |
 | `SPPO_GTFS_API_KEY` | *(vazio)* | `X-Api-Key` p/ o gtfs-service (vazio = sem cabeçalho) |

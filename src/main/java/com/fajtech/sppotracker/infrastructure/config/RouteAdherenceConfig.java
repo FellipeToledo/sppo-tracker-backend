@@ -57,7 +57,8 @@ public class RouteAdherenceConfig {
                                                  Executor routeShapeRefreshExecutor,
                                                  Clock clock,
                                                  RouteAdherenceProperties properties) {
-        return new RouteGeometryCache(port, routeShapeRefreshExecutor, clock, properties.cacheTtl());
+        return new RouteGeometryCache(port, routeShapeRefreshExecutor, clock,
+                properties.cacheTtl(), properties.emptyCacheTtl());
     }
 
     @Bean

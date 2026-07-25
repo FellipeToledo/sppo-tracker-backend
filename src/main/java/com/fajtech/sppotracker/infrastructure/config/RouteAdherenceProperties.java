@@ -14,6 +14,9 @@ import java.time.Duration;
  * @param corridorMeters                 meia-largura do corredor do traçado (default 15 m)
  * @param fallbackDistanceThresholdMeters limiar de distância para traçado degenerado (default 100 m)
  * @param cacheTtl                       validade da geometria em cache antes de re-resolver
+ * @param emptyCacheTtl                  validade (curta) de um resultado <b>vazio</b> em cache —
+ *                                       evita congelar linhas por {@code cacheTtl} quando o
+ *                                       gtfs-service está momentaneamente sem índice (default 5 min)
  * @param refreshPoolSize                threads de background para resolução de shapes
  * @param refreshQueueCapacity           fila do executor de background (bound; excesso é descartado)
  */
@@ -23,6 +26,7 @@ public record RouteAdherenceProperties(
         double corridorMeters,
         double fallbackDistanceThresholdMeters,
         Duration cacheTtl,
+        Duration emptyCacheTtl,
         int refreshPoolSize,
         int refreshQueueCapacity) {
 
@@ -38,6 +42,9 @@ public record RouteAdherenceProperties(
         }
         if (cacheTtl == null || cacheTtl.isZero() || cacheTtl.isNegative()) {
             cacheTtl = Duration.ofHours(6);
+        }
+        if (emptyCacheTtl == null || emptyCacheTtl.isZero() || emptyCacheTtl.isNegative()) {
+            emptyCacheTtl = Duration.ofMinutes(5);
         }
         if (refreshPoolSize <= 0) {
             refreshPoolSize = 2;

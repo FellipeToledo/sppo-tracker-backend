@@ -132,6 +132,16 @@ polígonos de garagem. Por isso ficaram fora:
    **falha transitória** (re-tentada). ⚠️ O feed é **instável** por conta da SMTR — quando
    está fora, o mapa fica vazio até a fonte voltar (não é bug do backend).
 
+5. **[ENDEREÇADO] Cache-vazio-preso da resolução de shapes.** Descoberto no deploy real:
+   enquanto o `sppo-gtfs-service` estava com índice `unloaded` (credencial ausente), ele
+   respondia `404` para **todas** as linhas; o backend cacheava esse "vazio" com o TTL longo
+   (6 h) e, mesmo após o gtfs voltar, seguia servindo vazio — só resolvendo após restart.
+   Corrigido: `RouteGeometryCache` agora usa um **TTL curto separado para resultados vazios**
+   (`gps.route.empty-cache-ttl`, default **5 min**), então um gtfs momentaneamente sem índice
+   não congela as linhas. *Companion opcional (outro repo):* o `sppo-gtfs-service` retornar
+   `503` (em vez de `404`) enquanto `unloaded`, para o backend tratar como falha transitória
+   (não-cacheável) — recomendado, mas o TTL curto já resolve do lado do backend.
+
 ## 6. Convenções seguidas (para manter na próxima sessão)
 
 - **TDD:** teste que falha primeiro → implementar → `mvn test`.
