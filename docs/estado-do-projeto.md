@@ -248,6 +248,42 @@ Tem teste guardando a inversão (`IndexReloadRunnerTest`), porque voltar o liste
 contador é cumulativo e um único arranque ruim (ou uma janela sem o gtfs no ar) fica
 lá para sempre.
 
+**Medição depois das correções (arranque de 2026-07-25 14:00):** primeiro minuto
+`empty=1 / shapes=188` (antes: `empty=285 / shapes=3`); em regime, `empty=5 / shapes=322`.
+Os 5 são exatamente os códigos com cara de linha sem planejamento — a métrica voltou a
+significar algo.
+
+### O que é "planejamento" (e de onde vem a regra)
+
+**`planejamento` é o nome do dataset** da SMTR no BigQuery: `rj-smtr.planejamento`. A regra
+de resolução não é convenção nossa, sai de duas tabelas dele (ver
+`BigQueryGtfsLoaderAdapter` no repo do gtfs e a seção *Data model & join* do README dele):
+
+- **`viagem_planejada_dia`** — quais `shape_id` cada `servico` roda por dia, com `sentido`,
+  `evento`, `modo`, `trajetos_alternativos[]` e o `feed_version` vigente. Particionada por `data`.
+- **`shapes_geom`** — a geometria de cada `shape_id` em WKT `LINESTRING`.
+
+Critério exato aplicado na carga do índice:
+
+1. escolhe o **`feed_version` da partição `data` mais recente** disponível;
+2. varre as viagens **desse feed** entre `max_data - 14 dias` e `max_data`
+   (`GTFS_PLANNED_LOOKBACK_DAYS`, para cobrir dia útil / sábado / domingo);
+3. une `shape_id` regular **+** `trajetos_alternativos[].shape_id`, distinct;
+4. filtra **`modo = 'Ônibus'`** (no `GtfsIndexBuilder`, não no SQL — `GTFS_MODOS`);
+5. pega a geometria em `shapes_geom` (`wkt_shape` mais recente por `shape_id`).
+
+Então **"linha sem planejamento" = o `servico` normalizado não aparece nesse conjunto.**
+Consultei o planejamento direto (90 dias, `SELECT`, dry-run antes — 209 MiB ≈ US$ 0,001)
+para saber o motivo de cada um dos 5:
+
+| código | no planejamento? | leitura |
+|---|---|---|
+| `001`, `1`, `3`, `441` | **nenhum registro em 90 dias** | código que não existe no plano — provável lixo/placeholder no feed de GPS |
+| `856` | existe, `modo=Ônibus`, 10.505 registros, **última viagem 2026-07-19** | saiu do plano (o feed atual vai até 07-25): linha real, sem planejamento vigente |
+| `2802SV` | não existe; **`2802` existe** (até 07-24, 2.379 registros) | o sufixo `SV` é do feed de GPS e não do planejamento — ver a ressalva de variante acima |
+
+(Controle: `613`, que resolve normalmente, tem 14.542 registros até 07-25.)
+
 **Débito/known-gaps desta fatia:**
 - Cache por **TTL** (6h). O contrato do serviço oferece `ETag`/`304` + `feedVersion.id`;
   a revalidação por ETag ainda **não** foi implementada (melhoria de eficiência, não
