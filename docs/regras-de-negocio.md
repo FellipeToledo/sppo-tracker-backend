@@ -123,6 +123,14 @@ Cada posição recebe **um** status final. Um pipeline coleta as *tags* de todas
 regras e decide o status por **ordem de precedência fixa** (não pela ordem das
 regras).
 
+> **Princípio: não se descarta posição, categoriza-se.** Toda posição que chega
+> mapeável recebe status e vai para o snapshot, o REST, o WebSocket e o mapa —
+> inclusive quando falta dado para avaliar alguma regra. O único ponto de perda é o
+> registro **malformado** do feed (sem coordenada válida, logo sem o que plotar), e
+> mesmo esse é **contado** em `gps.provider.records{result=malformed}`. Quando não há
+> itinerário para avaliar, a posição é rotulada `ROUTE_UNRESOLVED` (§4.4) em vez de
+> passar como se estivesse na rota.
+
 ### 4.1 Status possíveis
 `IN_OPERATION`, `IN_GARAGE`, `OUT_OF_MUNICIPALITY`, `OUT_OF_ROUTE`,
 `SUSPICIOUS`, `INVALID`, `STALE`.
@@ -147,11 +155,12 @@ tags).
 |---|---|---|---|
 | **Coordenadas inválidas** | `INVALID_COORDINATES` | posição é exatamente (0, 0) | — |
 | **Fora do município** | `OUT_OF_MUNICIPALITY` | fora do bounding box do Rio | box: lat [-23.10, -22.70], lon [-43.80, -43.05] (configurável) |
-| **Garagem (geofence)** | `GARAGE_GEOFENCE` | dentro de um polígono de garagem | polígonos GeoJSON empacotados (`resources/garages.geojson`) |
+| **Garagem (geofence)** | `GARAGE_GEOFENCE` | dentro de um polígono de garagem | polígonos GeoJSON empacotados (`resources/geofences/garages.geojson`) |
 | **Código de serviço — garagem** | `IN_GARAGE` | `serviceCode` ∈ conjunto de garagem | `GARAGEM`, `1 GAR` |
 | **Código de serviço — suspeito** | `SUSPICIOUS_SERVICE_CODE` | `serviceCode` ∈ conjunto suspeito | `MANUTENCAO`, `MANUT`, `VISTORIA`, `FORA DE OP`, `FORA OP`, `FORA DE OPERACAO`, `TREINO`, `TREINA`, `OPER.`, `00000` |
 | **Posição obsoleta (stale)** | `STALE` | `positionTimestamp + threshold < now` | threshold default **5 min** |
 | **Fora de rota** | `OUT_OF_ROUTE` | fora do corredor de **todos** os shapes da rota | ver 4.4 |
+| **Itinerário não avaliado** | `ROUTE_UNRESOLVED` | código **é de linha** mas não há geometria (linha sem planejamento, ou ainda não resolvida) | rótulo; **não** define status |
 
 **Normalização do `serviceCode`** (para as regras de código): remover acentos,
 `trim`, colapsar espaços, upper-case. Compara contra os conjuntos acima.
@@ -184,6 +193,13 @@ como dentro. Lacuna medida e ressalvas em `docs/estado-do-projeto.md` §10.
   TTL de vazio e a métrica de resolução enche de `empty` permanente, escondendo o sinal
   que importa (linha de verdade sem planejamento). É **pré-filtro do cliente**: não
   altera a normalização compartilhada com o `sppo-gtfs-service`.
+- **Sem geometria ⇒ rótulo, não silêncio.** Se o código é de linha e não há itinerário
+  (linha fora do planejamento vigente, ou geometria ainda não resolvida), a posição recebe
+  `ROUTE_UNRESOLVED`: continua no mapa e nas APIs, com o status decidido pelas outras
+  regras, mas **marcada como não verificada**. Sem isso ela apareceria como
+  `IN_OPERATION`/`onRoute` — indistinguível de um veículo de fato conferido dentro do
+  corredor. Código que não é linha (`GARAGEM`, `ESPECIAL`) não recebe o rótulo: não há
+  itinerário a avaliar.
 - **Fonte de geometria** (`ROUTE_SHAPE_SOURCE`): `gtfs-service` | `disabled`.
   Com `disabled` (default) a regra nem é montada — é o comportamento com a API
   pública pura, que não traz `routeId`/`shapeId`. Com `gtfs-service`, os shapes
@@ -192,6 +208,10 @@ como dentro. Lacuna medida e ressalvas em `docs/estado-do-projeto.md` §10.
 ### 4.5 Flags derivadas da classificação
 Além do status, a classificação expõe booleans para consumo/filtragem:
 `valid`, `insideMunicipality`, `insideGarage`, `onRoute` + o conjunto de `tags`.
+
+⚠️ **`onRoute` é booleano e não sabe dizer "não sei".** Leia junto com as tags: com
+`ROUTE_UNRESOLVED` presente, `onRoute=true` significa apenas *"não foi constatado fora
+da rota"*, não *"conferido na rota"*. Quem precisa da distinção usa a tag.
 
 | Status | valid | insideMunicipality | insideGarage | onRoute |
 |---|---|---|---|---|

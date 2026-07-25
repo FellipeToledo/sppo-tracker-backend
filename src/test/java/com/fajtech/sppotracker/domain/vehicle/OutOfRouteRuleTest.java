@@ -56,10 +56,30 @@ class OutOfRouteRuleTest {
     }
 
     @Test
-    void shouldStayNeutralWhenGeometryUnresolved() {
+    void shouldTagRouteUnresolvedWhenARealLineHasNoGeometry() {
+        // Nenhum ponto é descartado nem promovido a "na rota": fica rotulado como não
+        // avaliado (linha sem planejamento, ou geometria ainda não resolvida).
         OutOfRouteRule rule = ruleWith(service -> List.of());
         var tags = rule.evaluate(positionAt("100", at(-22.9020, -43.1950)), NOW);
-        assertThat(tags).isEmpty();
+        assertThat(tags).containsExactly(ClassificationTag.ROUTE_UNRESOLVED);
+    }
+
+    @Test
+    void shouldNotTagUnresolvedForCodesThatAreNotALine() {
+        // GARAGEM/ESPECIAL não têm itinerário a avaliar — rotular "sem planejamento" ali
+        // seria ruído (e a geometria nem é consultada).
+        OutOfRouteRule rule = ruleWith(service -> {
+            throw new AssertionError("não deve pedir geometria para: " + service);
+        });
+        assertThat(rule.evaluate(positionAt("GARAGEM", at(-22.90, -43.20)), NOW)).isEmpty();
+        assertThat(rule.evaluate(positionAt("FORA DE OP", at(-22.90, -43.20)), NOW)).isEmpty();
+    }
+
+    @Test
+    void shouldNotTagUnresolvedForZeroZero() {
+        // (0,0) é lixo do feed: vence como INVALID, não faz sentido rotular itinerário.
+        OutOfRouteRule rule = ruleWith(service -> List.of());
+        assertThat(rule.evaluate(positionAt("100", at(0, 0)), NOW)).isEmpty();
     }
 
     @Test

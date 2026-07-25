@@ -5,6 +5,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -35,5 +36,17 @@ class MapViewControllerTest {
                 .andExpect(content().string(containsString("id=\"garages\"")))
                 .andExpect(content().string(containsString("createPane('garages')")))
                 .andExpect(content().string(containsString("/api/v1/garages")));
+    }
+
+    @Test
+    void shouldCategoriseUnevaluatedItineraryInsteadOfHidingIt() {
+        // Nada é descartado: posição sem itinerário avaliado entra no mapa com borda
+        // tracejada, linha no popup, entrada na legenda e contagem no rodapé (§4.4).
+        assertThatCode(() -> mockMvc.perform(get("/"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("ROUTE_UNRESOLVED")))
+                .andExpect(content().string(containsString("sem planejamento")))
+                .andExpect(content().string(containsString("dashArray"))))
+                .doesNotThrowAnyException();
     }
 }

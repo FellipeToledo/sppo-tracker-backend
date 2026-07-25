@@ -43,6 +43,21 @@ class PositionClassifierTest {
     }
 
     @Test
+    void routeUnresolvedIsALabelAndDoesNotChangeStatus() {
+        // A tag diz "aderência não avaliada" — não é status, e não impede IN_OPERATION.
+        var classification = classifierWith(ClassificationTag.ROUTE_UNRESOLVED)
+                .classify(anyPosition(), NOW);
+        assertThat(classification.status()).isEqualTo(VehiclePositionStatus.IN_OPERATION);
+        assertThat(classification.tags()).containsExactly(ClassificationTag.ROUTE_UNRESOLVED);
+    }
+
+    @Test
+    void outOfRouteStillWinsOverRouteUnresolved() {
+        assertThat(statusFor(ClassificationTag.OUT_OF_ROUTE, ClassificationTag.ROUTE_UNRESOLVED))
+                .isEqualTo(VehiclePositionStatus.OUT_OF_ROUTE);
+    }
+
+    @Test
     void noTagsIsInOperation() {
         assertThat(statusFor()).isEqualTo(VehiclePositionStatus.IN_OPERATION);
     }

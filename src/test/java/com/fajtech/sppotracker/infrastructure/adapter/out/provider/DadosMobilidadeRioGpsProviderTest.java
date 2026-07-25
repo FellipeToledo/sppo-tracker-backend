@@ -52,6 +52,10 @@ class DadosMobilidadeRioGpsProviderTest {
                 WebClient.builder(), props, mapper, JsonMapper.builder().build(), registry);
     }
 
+    private double records(String result) {
+        return registry.get("gps.provider.records").tag("result", result).counter().count();
+    }
+
     private double requests(String outcome) {
         return registry.get("gps.provider.requests").tag("outcome", outcome).counter().count();
     }
@@ -106,6 +110,28 @@ class DadosMobilidadeRioGpsProviderTest {
         List<VehiclePosition> result = provider.fetch(FROM, TO);
 
         assertThat(result).extracting(VehiclePosition::vehicleId).containsExactly("A1");
+        // Registro malformado é o único ponto em que uma posição se perde — tem de ficar
+        // contabilizado, não só num log.debug.
+        assertThat(records("mapped")).isEqualTo(1.0);
+        assertThat(records("malformed")).isEqualTo(1.0);
+    }
+
+    @Test
+    void shouldNotCountMalformedWhenEveryRecordMaps() {
+        server.enqueue(new MockResponse.Builder()
+                .setHeader("Content-Type", "application/json")
+                .body("""
+                        [
+                          {"ordem":"A1","latitude":"-22,9","longitude":"-43,1",
+                           "datahora":"1690000000000","velocidade":"10","linha":"100",
+                           "datahoraenvio":"1690000002000","datahoraservidor":"1690000005000"}
+                        ]""").build());
+
+        provider.fetch(FROM, TO);
+
+        assertThat(records("mapped")).isEqualTo(1.0);
+        assertThat(registry.find("gps.provider.records").tag("result", "malformed").counter().count())
+                .isZero();
     }
 
     @Test

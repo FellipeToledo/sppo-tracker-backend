@@ -13,5 +13,12 @@ public enum ClassificationTag {
     IN_GARAGE,
     SUSPICIOUS_SERVICE_CODE,
     STALE,
-    OUT_OF_ROUTE
+    OUT_OF_ROUTE,
+    /**
+     * Aderência ao itinerário <b>não avaliada</b>: o código é de linha, mas não há
+     * geometria para ele (linha sem planejamento no feed, ou ainda não resolvida).
+     * <b>Não define status</b> — é rótulo, para que "não verificado" não se confunda com
+     * "verificado e dentro da rota". Ver §4.4.
+     */
+    ROUTE_UNRESOLVED
 }

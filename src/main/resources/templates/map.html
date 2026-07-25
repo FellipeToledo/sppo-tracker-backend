@@ -46,6 +46,8 @@
         .panel label.check input { width: auto; }
         .swatch { width: 12px; height: 12px; flex: 0 0 auto; border-radius: 2px;
                   background: rgba(142, 68, 173, .35); border: 1px solid #8e44ad; }
+        .dashed { width: 12px; height: 12px; border-radius: 50%; flex: 0 0 auto;
+                  background: #7f8c8d; border: 2px dashed #ecf0f1; }
     </style>
 </head>
 <body>
@@ -135,6 +137,11 @@
     devLegend.className = 'item';
     devLegend.innerHTML = '<span class="ring"></span> Em desvio de rota';
     legend.appendChild(devLegend);
+    // Legenda do itinerário não avaliado (borda tracejada).
+    const unresolvedLegend = document.createElement('div');
+    unresolvedLegend.className = 'item';
+    unresolvedLegend.innerHTML = '<span class="dashed"></span> Sem planejamento (itinerário não avaliado)';
+    legend.appendChild(unresolvedLegend);
     // Legenda da geofence de garagem.
     const garageLegend = document.createElement('div');
     garageLegend.className = 'item';
@@ -168,6 +175,8 @@
         // Só aparece quando a geofence casou (§4.3) — IN_GARAGE por código de serviço
         // não diz em qual pátio o veículo está.
         if (v.garageName) rows.push(['Garagem', v.garageName]);
+        rows.push(['Itinerário', routeUnresolved(v) ? 'sem planejamento (não avaliado)'
+            : (v.onRoute ? 'na rota' : 'fora da rota')]);
         rows.push(
             ['Empresa', v.companyName || '—'], ['Consórcio', v.consortiumName || '—'],
             ['Velocidade', v.speed != null ? v.speed + ' km/h' : '—'],
@@ -206,6 +215,12 @@
         else map.removeLayer(garageLayer);
     });
 
+    // Aderência não avaliada (§4.4): linha sem planejamento no feed, ou geometria ainda
+    // não resolvida. Não é descarte — é categoria: o ponto aparece, marcado.
+    function routeUnresolved(v) {
+        return (v.tags || []).indexOf('ROUTE_UNRESOLVED') !== -1;
+    }
+
     function passesFilter(v) {
         const code = serviceInput.value.trim().toUpperCase();
         if (code && (v.serviceCode || '').toUpperCase() !== code) return false;
@@ -223,12 +238,20 @@
         }
         const color = STATUS_COLORS[v.classificationStatus] || '#7f8c8d';
         const deviating = activeDeviations.has(v.vehicleId);
-        const style = deviating
-            ? { radius: 7, weight: 3, color: '#e74c3c', fillColor: color, fillOpacity: 0.9 }
-            : { radius: 5, weight: 1, color: '#222', fillColor: color, fillOpacity: 0.9 };
+        let style;
+        if (deviating) {
+            style = { radius: 7, weight: 3, color: '#e74c3c', fillColor: color, fillOpacity: 0.9 };
+        } else if (routeUnresolved(v)) {
+            // Borda tracejada = itinerário não avaliado. O ponto está no mapa como
+            // qualquer outro; o traço evita confundir com "verificado e na rota".
+            style = { radius: 5, weight: 2, color: '#ecf0f1', dashArray: '2,2',
+                      fillColor: color, fillOpacity: 0.9 };
+        } else {
+            style = { radius: 5, weight: 1, color: '#222', fillColor: color, fillOpacity: 0.9 };
+        }
         if (m) {
             m.setLatLng([v.latitude, v.longitude]);
-            m.setStyle(style);
+            m.setStyle(Object.assign({ dashArray: null }, style));
             m.setRadius(style.radius);
             m.getPopup().setContent(popupHtml(v));
         } else {
@@ -244,7 +267,10 @@
     }
 
     function updateStatusLine(extra) {
+        let unresolved = 0;
+        vehicles.forEach(function (v) { if (routeUnresolved(v)) unresolved++; });
         statusLine.textContent = markers.size + ' visíveis · ' + vehicles.size + ' na frota'
+            + (unresolved ? ' · ' + unresolved + ' sem planejamento' : '')
             + (extra ? ' · ' + extra : '') + ' · ' + new Date().toLocaleTimeString('pt-BR');
     }
 

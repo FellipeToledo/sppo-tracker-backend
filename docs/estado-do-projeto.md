@@ -28,7 +28,7 @@ scheduler → readiness → cooldown → janela [now-90s, now] → fetch (provid
   `spring-boot-starter-webmvc-test` (o `@WebMvcTest` mudou para
   `org.springframework.boot.webmvc.test.autoconfigure`). Annotations Jackson
   permanecem em `com.fasterxml.jackson.annotation`.
-- **Testes:** `mvn --batch-mode test` → **241 testes, 0 falhas** (todos herméticos:
+- **Testes:** `mvn --batch-mode test` → **247 testes, 0 falhas** (todos herméticos:
   sem Redis/Postgres/rede reais — usam mocks, `SimpleMeterRegistry`, MockWebServer,
   `@WebMvcTest`). Os de integração (Testcontainers) rodam no `mvn verify` / CI.
 - **Estado do git (2026-07-25):** `main` tem as fatias A/B/C + stack de deploy (PR #11
@@ -252,6 +252,31 @@ lá para sempre.
 `empty=1 / shapes=188` (antes: `empty=285 / shapes=3`); em regime, `empty=5 / shapes=322`.
 Os 5 são exatamente os códigos com cara de linha sem planejamento — a métrica voltou a
 significar algo.
+
+### Nenhum ponto é descartado — é categorizado
+
+Verificado no fluxo real (2026-07-25): `received=41963` = `changed=37977` +
+`unchanged=3971` + `duplicated=15`, e a soma de `gps.classifications{status}` = **37977**,
+exatamente os `changed`. Ou seja: da ingestão à classificação não se perde nada.
+`duplicated`/`unchanged` não são perda (o ponto já existe / não mudou — o veículo segue no
+mapa com o snapshot vigente).
+
+Duas frestas foram fechadas nesta rodada:
+
+1. **Registro malformado** (sem coordenada válida) era descartado com um `log.debug` e
+   ficava invisível — `received` só conta o que o mapper conseguiu mapear. Agora há
+   `gps.provider.records{result=mapped|malformed}` e um `WARN` com a contagem. É o único
+   ponto de perda que existe, e não há como plotá-lo (não tem coordenada).
+2. **Linha sem planejamento não era categorizada.** A `OutOfRouteRule` ficava neutra e o
+   veículo saía como `IN_OPERATION` com `onRoute=true` — indistinguível de um conferido
+   dentro do corredor. Agora recebe a tag **`ROUTE_UNRESOLVED`** (§4.3/§4.4), aparece no
+   payload REST/WebSocket e no mapa com **borda tracejada**, linha "Itinerário: sem
+   planejamento" no popup, entrada na legenda e contagem no rodapé do painel. O status
+   continua sendo decidido pelas outras regras — a tag é rótulo, não status.
+
+⚠️ `onRoute` é booleano e não sabe dizer "não sei": com `ROUTE_UNRESOLVED` presente ele
+significa "não constatado fora da rota". Quem precisa da distinção lê a tag. Trocar o
+booleano por tri-estado seria mudança de contrato na API — não fiz.
 
 ### O que é "planejamento" (e de onde vem a regra)
 
