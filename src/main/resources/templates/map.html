@@ -48,6 +48,8 @@
                   background: rgba(142, 68, 173, .35); border: 1px solid #8e44ad; }
         .dashed { width: 12px; height: 12px; border-radius: 50%; flex: 0 0 auto;
                   background: #7f8c8d; border: 2px dashed #ecf0f1; }
+        .faded { width: 12px; height: 12px; border-radius: 50%; flex: 0 0 auto;
+                 background: rgba(46, 204, 113, .45); border: 1px solid #7f8c8d; }
     </style>
 </head>
 <body>
@@ -140,8 +142,12 @@
     // Legenda do itinerário não avaliado (borda tracejada).
     const unresolvedLegend = document.createElement('div');
     unresolvedLegend.className = 'item';
-    unresolvedLegend.innerHTML = '<span class="dashed"></span> Sem planejamento (itinerário não avaliado)';
+    unresolvedLegend.innerHTML = '<span class="dashed"></span> Sem planejamento no feed';
     legend.appendChild(unresolvedLegend);
+    const pendingLegend = document.createElement('div');
+    pendingLegend.className = 'item';
+    pendingLegend.innerHTML = '<span class="faded"></span> Aguardando itinerário';
+    legend.appendChild(pendingLegend);
     // Legenda da geofence de garagem.
     const garageLegend = document.createElement('div');
     garageLegend.className = 'item';
@@ -175,7 +181,8 @@
         // Só aparece quando a geofence casou (§4.3) — IN_GARAGE por código de serviço
         // não diz em qual pátio o veículo está.
         if (v.garageName) rows.push(['Garagem', v.garageName]);
-        rows.push(['Itinerário', routeUnresolved(v) ? 'sem planejamento (não avaliado)'
+        rows.push(['Itinerário', notPlanned(v) ? 'sem planejamento no feed'
+            : pendingRoute(v) ? 'aguardando itinerário'
             : (v.onRoute ? 'na rota' : 'fora da rota')]);
         rows.push(
             ['Empresa', v.companyName || '—'], ['Consórcio', v.consortiumName || '—'],
@@ -215,10 +222,15 @@
         else map.removeLayer(garageLayer);
     });
 
-    // Aderência não avaliada (§4.4): linha sem planejamento no feed, ou geometria ainda
-    // não resolvida. Não é descarte — é categoria: o ponto aparece, marcado.
-    function routeUnresolved(v) {
-        return (v.tags || []).indexOf('ROUTE_UNRESOLVED') !== -1;
+    // Aderência não avaliada (§4.4), em dois casos DISTINTOS — o ponto sempre aparece:
+    //   notPlanned: a linha não tem itinerário no feed vigente (persistente, operacional);
+    //   pending:    geometria ainda não resolvida (transitório, some no próximo ciclo).
+    function notPlanned(v) {
+        return (v.tags || []).indexOf('ROUTE_NOT_PLANNED') !== -1;
+    }
+
+    function pendingRoute(v) {
+        return (v.tags || []).indexOf('ROUTE_PENDING') !== -1;
     }
 
     function passesFilter(v) {
@@ -241,11 +253,16 @@
         let style;
         if (deviating) {
             style = { radius: 7, weight: 3, color: '#e74c3c', fillColor: color, fillOpacity: 0.9 };
-        } else if (routeUnresolved(v)) {
-            // Borda tracejada = itinerário não avaliado. O ponto está no mapa como
+        } else if (notPlanned(v)) {
+            // Borda tracejada = linha sem planejamento. O ponto está no mapa como
             // qualquer outro; o traço evita confundir com "verificado e na rota".
             style = { radius: 5, weight: 2, color: '#ecf0f1', dashArray: '2,2',
                       fillColor: color, fillOpacity: 0.9 };
+        } else if (pendingRoute(v)) {
+            // Esmaecido = aguardando itinerário (transitório). Distinto do tracejado
+            // para não inflar a leitura operacional de "sem planejamento".
+            style = { radius: 5, weight: 1, color: '#7f8c8d',
+                      fillColor: color, fillOpacity: 0.45 };
         } else {
             style = { radius: 5, weight: 1, color: '#222', fillColor: color, fillOpacity: 0.9 };
         }
@@ -267,10 +284,14 @@
     }
 
     function updateStatusLine(extra) {
-        let unresolved = 0;
-        vehicles.forEach(function (v) { if (routeUnresolved(v)) unresolved++; });
+        let sem = 0, aguardando = 0;
+        vehicles.forEach(function (v) {
+            if (notPlanned(v)) sem++;
+            else if (pendingRoute(v)) aguardando++;
+        });
         statusLine.textContent = markers.size + ' visíveis · ' + vehicles.size + ' na frota'
-            + (unresolved ? ' · ' + unresolved + ' sem planejamento' : '')
+            + (sem ? ' · ' + sem + ' sem planejamento' : '')
+            + (aguardando ? ' · ' + aguardando + ' aguardando itinerário' : '')
             + (extra ? ' · ' + extra : '') + ' · ' + new Date().toLocaleTimeString('pt-BR');
     }
 

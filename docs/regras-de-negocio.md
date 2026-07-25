@@ -128,8 +128,8 @@ regras).
 > inclusive quando falta dado para avaliar alguma regra. O único ponto de perda é o
 > registro **malformado** do feed (sem coordenada válida, logo sem o que plotar), e
 > mesmo esse é **contado** em `gps.provider.records{result=malformed}`. Quando não há
-> itinerário para avaliar, a posição é rotulada `ROUTE_UNRESOLVED` (§4.4) em vez de
-> passar como se estivesse na rota.
+> itinerário para avaliar, a posição é rotulada — `ROUTE_NOT_PLANNED` ou `ROUTE_PENDING`
+> (§4.4) — em vez de passar como se estivesse na rota.
 
 ### 4.1 Status possíveis
 `IN_OPERATION`, `IN_GARAGE`, `OUT_OF_MUNICIPALITY`, `OUT_OF_ROUTE`,
@@ -160,7 +160,8 @@ tags).
 | **Código de serviço — suspeito** | `SUSPICIOUS_SERVICE_CODE` | `serviceCode` ∈ conjunto suspeito | `MANUTENCAO`, `MANUT`, `VISTORIA`, `FORA DE OP`, `FORA OP`, `FORA DE OPERACAO`, `TREINO`, `TREINA`, `OPER.`, `00000` |
 | **Posição obsoleta (stale)** | `STALE` | `positionTimestamp + threshold < now` | threshold default **5 min** |
 | **Fora de rota** | `OUT_OF_ROUTE` | fora do corredor de **todos** os shapes da rota | ver 4.4 |
-| **Itinerário não avaliado** | `ROUTE_UNRESOLVED` | código **é de linha** mas não há geometria (linha sem planejamento, ou ainda não resolvida) | rótulo; **não** define status |
+| **Sem planejamento** | `ROUTE_NOT_PLANNED` | código **é de linha** e a fonte respondeu que ela **não tem itinerário no feed vigente** | rótulo; **não** define status |
+| **Itinerário pendente** | `ROUTE_PENDING` | código **é de linha** e a geometria **ainda não foi resolvida** (cache frio, background) | rótulo transitório; **não** define status |
 
 **Normalização do `serviceCode`** (para as regras de código): remover acentos,
 `trim`, colapsar espaços, upper-case. Compara contra os conjuntos acima.
@@ -193,13 +194,19 @@ como dentro. Lacuna medida e ressalvas em `docs/estado-do-projeto.md` §10.
   TTL de vazio e a métrica de resolução enche de `empty` permanente, escondendo o sinal
   que importa (linha de verdade sem planejamento). É **pré-filtro do cliente**: não
   altera a normalização compartilhada com o `sppo-gtfs-service`.
-- **Sem geometria ⇒ rótulo, não silêncio.** Se o código é de linha e não há itinerário
-  (linha fora do planejamento vigente, ou geometria ainda não resolvida), a posição recebe
-  `ROUTE_UNRESOLVED`: continua no mapa e nas APIs, com o status decidido pelas outras
-  regras, mas **marcada como não verificada**. Sem isso ela apareceria como
-  `IN_OPERATION`/`onRoute` — indistinguível de um veículo de fato conferido dentro do
-  corredor. Código que não é linha (`GARAGEM`, `ESPECIAL`) não recebe o rótulo: não há
-  itinerário a avaliar.
+- **Sem geometria ⇒ rótulo, não silêncio — e os dois casos são separados.** A posição
+  continua no mapa e nas APIs, com o status decidido pelas outras regras, mas **marcada
+  como não verificada**. Sem isso apareceria como `IN_OPERATION`/`onRoute` — indistinguível
+  de um veículo de fato conferido dentro do corredor.
+  - `ROUTE_NOT_PLANNED` — a fonte respondeu de forma **autoritativa** que a linha não tem
+    itinerário no feed vigente. **Persistente**: é o número que serve para operação.
+  - `ROUTE_PENDING` — geometria **ainda não resolvida** (cache frio, resolução em
+    background, executor saturado). **Transitório**: cai sozinho nos próximos ciclos.
+  - Juntá-los faria a contagem de "veículos sem itinerário" inflar a cada reinício do
+    serviço (medido: 170 no 1º ciclo → 59 em 6 min, sendo a maior parte cache frio).
+  - Código que não é linha (`GARAGEM`, `ESPECIAL`) não recebe rótulo: não há itinerário a
+    avaliar. Quem não sabe distinguir (implementação simples da porta) responde
+    `PENDING` — **nunca** afirma que a linha está fora do planejamento.
 - **Fonte de geometria** (`ROUTE_SHAPE_SOURCE`): `gtfs-service` | `disabled`.
   Com `disabled` (default) a regra nem é montada — é o comportamento com a API
   pública pura, que não traz `routeId`/`shapeId`. Com `gtfs-service`, os shapes
@@ -210,8 +217,8 @@ Além do status, a classificação expõe booleans para consumo/filtragem:
 `valid`, `insideMunicipality`, `insideGarage`, `onRoute` + o conjunto de `tags`.
 
 ⚠️ **`onRoute` é booleano e não sabe dizer "não sei".** Leia junto com as tags: com
-`ROUTE_UNRESOLVED` presente, `onRoute=true` significa apenas *"não foi constatado fora
-da rota"*, não *"conferido na rota"*. Quem precisa da distinção usa a tag.
+`ROUTE_NOT_PLANNED` ou `ROUTE_PENDING` presente, `onRoute=true` significa apenas *"não foi
+constatado fora da rota"*, não *"conferido na rota"*. Quem precisa da distinção usa a tag.
 
 | Status | valid | insideMunicipality | insideGarage | onRoute |
 |---|---|---|---|---|

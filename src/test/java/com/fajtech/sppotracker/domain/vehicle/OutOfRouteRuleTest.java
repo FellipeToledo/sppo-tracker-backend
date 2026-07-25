@@ -56,12 +56,33 @@ class OutOfRouteRuleTest {
     }
 
     @Test
-    void shouldTagRouteUnresolvedWhenARealLineHasNoGeometry() {
-        // Nenhum ponto é descartado nem promovido a "na rota": fica rotulado como não
-        // avaliado (linha sem planejamento, ou geometria ainda não resolvida).
+    void shouldTagPendingWhenGeometryWasNotResolvedYet() {
+        // Fonte sem a distinção (default do port) ⇒ conservador: PENDING, nunca afirma
+        // que a linha está fora do planejamento.
         OutOfRouteRule rule = ruleWith(service -> List.of());
         var tags = rule.evaluate(positionAt("100", at(-22.9020, -43.1950)), NOW);
-        assertThat(tags).containsExactly(ClassificationTag.ROUTE_UNRESOLVED);
+        assertThat(tags).containsExactly(ClassificationTag.ROUTE_PENDING);
+    }
+
+    @Test
+    void shouldTagNotPlannedWhenTheSourceSaysTheLineHasNoItinerary() {
+        // Resposta autoritativa: a linha não está no feed vigente. É o número que serve
+        // para operação — não infla com cache frio.
+        OutOfRouteRule rule = ruleWith(new RouteGeometrySource() {
+            @Override
+            public List<RoutePath> pathsFor(String serviceCode) {
+                return List.of();
+            }
+
+            @Override
+            public Availability availabilityFor(String serviceCode) {
+                return Availability.NOT_PLANNED;
+            }
+        });
+
+        var tags = rule.evaluate(positionAt("856", at(-22.9020, -43.1950)), NOW);
+
+        assertThat(tags).containsExactly(ClassificationTag.ROUTE_NOT_PLANNED);
     }
 
     @Test

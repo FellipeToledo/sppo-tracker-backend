@@ -1,6 +1,7 @@
 package com.fajtech.sppotracker.application.route;
 
 import com.fajtech.sppotracker.application.port.out.ResolveRouteShapesPort;
+import com.fajtech.sppotracker.domain.route.RouteGeometrySource;
 import com.fajtech.sppotracker.domain.route.RoutePath;
 import com.fajtech.sppotracker.domain.vehicle.Coordinates;
 import org.junit.jupiter.api.Test;
@@ -97,6 +98,50 @@ class RouteGeometryCacheTest {
         now.set(now.get().plus(Duration.ofMinutes(6)));     // passou o emptyTtl (5m), mas < cacheTtl (6h)
         cache.pathsFor("100");                              // re-resolve por causa do TTL curto de vazio
         assertThat(calls.get()).isEqualTo(2);
+    }
+
+    @Test
+    void shouldDistinguishNotPlannedFromPending() {
+        // O cache é o único que sabe a diferença: sem entrada = nunca resolvi (PENDING);
+        // entrada vazia = a fonte respondeu que a linha não tem itinerário (NOT_PLANNED).
+        // Só assim "veículos sem itinerário" para de inflar a cada cache frio.
+        ResolveRouteShapesPort port = service -> Optional.of(ResolvedShapes.empty("2026-07"));
+        RouteGeometryCache cache = new RouteGeometryCache(port, DIRECT, Clock.systemUTC(), Duration.ofHours(6), Duration.ofMinutes(5));
+
+        assertThat(cache.availabilityFor("856"))
+                .as("antes de qualquer resolução")
+                .isEqualTo(RouteGeometrySource.Availability.PENDING);
+
+        cache.pathsFor("856");                              // resolve: vazio autoritativo
+
+        assertThat(cache.availabilityFor("856"))
+                .isEqualTo(RouteGeometrySource.Availability.NOT_PLANNED);
+    }
+
+    @Test
+    void shouldReportResolvedWhenGeometryIsCached() {
+        ResolveRouteShapesPort port = service -> Optional.of(new ResolvedShapes("2026-07", List.of(segment())));
+        RouteGeometryCache cache = new RouteGeometryCache(port, DIRECT, Clock.systemUTC(), Duration.ofHours(6), Duration.ofMinutes(5));
+
+        cache.pathsFor("100");
+
+        assertThat(cache.availabilityFor("100")).isEqualTo(RouteGeometrySource.Availability.RESOLVED);
+    }
+
+    @Test
+    void availabilityShouldNotTriggerResolution() {
+        // Leitura pura: consultar o motivo não pode gastar I/O nem agendar refresh.
+        AtomicInteger calls = new AtomicInteger();
+        ResolveRouteShapesPort port = service -> {
+            calls.incrementAndGet();
+            return Optional.of(new ResolvedShapes("2026-07", List.of(segment())));
+        };
+        RouteGeometryCache cache = new RouteGeometryCache(port, DIRECT, Clock.systemUTC(), Duration.ofHours(6), Duration.ofMinutes(5));
+
+        cache.availabilityFor("100");
+        cache.availabilityFor("100");
+
+        assertThat(calls.get()).isZero();
     }
 
     @Test

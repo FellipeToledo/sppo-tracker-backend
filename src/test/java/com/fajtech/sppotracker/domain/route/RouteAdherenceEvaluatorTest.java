@@ -40,8 +40,29 @@ class RouteAdherenceEvaluatorTest {
     }
 
     @Test
-    void shouldReportUnresolvedWhenNoGeometry() {
-        assertThat(evaluatorWith(s -> List.of()).evaluate("100", at(-22.9, -43.2)).isUnresolved()).isTrue();
+    void shouldReportPendingWhenTheSourceCannotTellWhy() {
+        RouteAdherence a = evaluatorWith(s -> List.of()).evaluate("100", at(-22.9, -43.2));
+        assertThat(a.isUnresolved()).isTrue();
+        assertThat(a.isPending()).as("default conservador do port").isTrue();
+        assertThat(a.isNotPlanned()).isFalse();
+    }
+
+    @Test
+    void shouldReportNotPlannedWhenTheSourceIsAuthoritative() {
+        RouteAdherence a = evaluatorWith(new RouteGeometrySource() {
+            @Override
+            public List<RoutePath> pathsFor(String serviceCode) {
+                return List.of();
+            }
+
+            @Override
+            public Availability availabilityFor(String serviceCode) {
+                return Availability.NOT_PLANNED;
+            }
+        }).evaluate("856", at(-22.9, -43.2));
+
+        assertThat(a.isNotPlanned()).isTrue();
+        assertThat(a.isUnresolved()).as("segue 'sem geometria' para a máquina de desvio").isTrue();
     }
 
     @Test

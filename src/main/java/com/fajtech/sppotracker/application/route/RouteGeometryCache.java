@@ -68,6 +68,24 @@ public final class RouteGeometryCache implements RouteGeometrySource {
         return entry == null ? List.of() : entry.paths();
     }
 
+    /**
+     * Leitura pura (não agenda resolução): entrada ausente ⇒ {@code PENDING}; entrada
+     * presente e vazia ⇒ {@code NOT_PLANNED}, porque só se guarda entrada quando a fonte
+     * respondeu — falha de I/O não vira entrada (ver {@link #scheduleRefresh}).
+     */
+    @Override
+    public Availability availabilityFor(String serviceCode) {
+        String key = LineCodeKey.of(serviceCode);
+        if (key == null) {
+            return Availability.PENDING;
+        }
+        Entry entry = cache.get(key);
+        if (entry == null) {
+            return Availability.PENDING;
+        }
+        return entry.paths().isEmpty() ? Availability.NOT_PLANNED : Availability.RESOLVED;
+    }
+
     private boolean isStale(Entry entry) {
         Duration effectiveTtl = entry.paths().isEmpty() ? emptyTtl : ttl;
         return Duration.between(entry.resolvedAt(), clock.instant()).compareTo(effectiveTtl) >= 0;

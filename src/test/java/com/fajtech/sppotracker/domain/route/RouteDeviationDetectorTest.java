@@ -140,10 +140,14 @@ class RouteDeviationDetectorTest {
 
     @Test
     void shouldStayUnchangedOnUnresolvedAdherence() {
+        // Os dois sabores de "sem geometria" são equivalentes para a máquina: espera o
+        // próximo ciclo, sem inventar episódio de desvio.
         VehicleDeviationState state = VehicleDeviationState.initial();
-        DeviationOutcome out = observe(state, RouteAdherence.unresolved(), T0);
-        assertThat(out.events()).isEmpty();
-        assertThat(out.state()).isEqualTo(state);
+        for (RouteAdherence adherence : List.of(RouteAdherence.pending(), RouteAdherence.notPlanned())) {
+            DeviationOutcome out = observe(state, adherence, T0);
+            assertThat(out.events()).as("%s", adherence.status()).isEmpty();
+            assertThat(out.state()).isEqualTo(state);
+        }
     }
 
     // --- helpers de cenário ---

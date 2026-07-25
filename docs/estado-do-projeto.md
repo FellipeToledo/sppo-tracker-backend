@@ -28,7 +28,7 @@ scheduler → readiness → cooldown → janela [now-90s, now] → fetch (provid
   `spring-boot-starter-webmvc-test` (o `@WebMvcTest` mudou para
   `org.springframework.boot.webmvc.test.autoconfigure`). Annotations Jackson
   permanecem em `com.fasterxml.jackson.annotation`.
-- **Testes:** `mvn --batch-mode test` → **247 testes, 0 falhas** (todos herméticos:
+- **Testes:** `mvn --batch-mode test` → **252 testes, 0 falhas** (todos herméticos:
   sem Redis/Postgres/rede reais — usam mocks, `SimpleMeterRegistry`, MockWebServer,
   `@WebMvcTest`). Os de integração (Testcontainers) rodam no `mvn verify` / CI.
 - **Estado do git (2026-07-25):** `main` tem as fatias A/B/C + stack de deploy (PR #11
@@ -269,10 +269,24 @@ Duas frestas foram fechadas nesta rodada:
    ponto de perda que existe, e não há como plotá-lo (não tem coordenada).
 2. **Linha sem planejamento não era categorizada.** A `OutOfRouteRule` ficava neutra e o
    veículo saía como `IN_OPERATION` com `onRoute=true` — indistinguível de um conferido
-   dentro do corredor. Agora recebe a tag **`ROUTE_UNRESOLVED`** (§4.3/§4.4), aparece no
-   payload REST/WebSocket e no mapa com **borda tracejada**, linha "Itinerário: sem
-   planejamento" no popup, entrada na legenda e contagem no rodapé do painel. O status
-   continua sendo decidido pelas outras regras — a tag é rótulo, não status.
+   dentro do corredor. Agora é rotulada, e em **duas categorias distintas** (§4.3/§4.4),
+   ambas rótulo e não status:
+
+   | tag | significado | natureza | no mapa |
+   |---|---|---|---|
+   | `ROUTE_NOT_PLANNED` | a fonte respondeu que a linha **não tem itinerário no feed vigente** | **persistente** — é o número operacional | borda **tracejada** |
+   | `ROUTE_PENDING` | geometria **ainda não resolvida** (cache frio, background) | **transitório** — cai nos próximos ciclos | marcador **esmaecido** |
+
+   Quem sabe a diferença é o `RouteGeometryCache`: **sem entrada** = nunca resolvi
+   (`PENDING`); **entrada vazia** = a fonte respondeu que não há itinerário
+   (`NOT_PLANNED`) — só se guarda entrada quando houve resposta, falha de I/O não vira
+   entrada. Exposto por `RouteGeometrySource.availabilityFor()`, leitura pura que **não**
+   dispara resolução; o default da porta é **conservador** (`PENDING`), para que uma
+   implementação simples nunca afirme que a linha está fora do planejamento.
+
+   Por que separar: juntas, a contagem inflava a cada reinício — medido no deploy de
+   2026-07-25: **170** no 1º ciclo, **103** em 2 min, **59** em 6 min, sendo a maior parte
+   cache frio, não linha sem plano.
 
 ⚠️ `onRoute` é booleano e não sabe dizer "não sei": com `ROUTE_UNRESOLVED` presente ele
 significa "não constatado fora da rota". Quem precisa da distinção lê a tag. Trocar o

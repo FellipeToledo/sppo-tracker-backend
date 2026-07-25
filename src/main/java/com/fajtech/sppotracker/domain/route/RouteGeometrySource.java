@@ -15,4 +15,27 @@ import java.util.List;
 public interface RouteGeometrySource {
 
     List<RoutePath> pathsFor(String serviceCode);
+
+    /**
+     * <b>Por que</b> {@link #pathsFor} veio vazio — a única forma de separar "a linha não
+     * tem itinerário no feed" (persistente) de "ainda não resolvi" (transitório). Sem essa
+     * distinção, o número de veículos sem itinerário infla a cada reinício do serviço.
+     *
+     * <p>Não dispara resolução: é leitura pura, para o hot path.
+     *
+     * <p>O default é <b>conservador</b> ({@code PENDING} quando vazio): quem não sabe
+     * distinguir nunca afirma que a linha está fora do planejamento.
+     */
+    default Availability availabilityFor(String serviceCode) {
+        return pathsFor(serviceCode).isEmpty() ? Availability.PENDING : Availability.RESOLVED;
+    }
+
+    enum Availability {
+        /** Geometria em cache. */
+        RESOLVED,
+        /** A fonte respondeu que a linha não tem itinerário no feed vigente. */
+        NOT_PLANNED,
+        /** Nunca resolvida (cache frio, resolução em background, executor saturado). */
+        PENDING
+    }
 }

@@ -41,11 +41,15 @@ public final class RouteAdherenceEvaluator {
         // Ver LineCodeKey#looksLikeLine — evita I/O inútil e mantém a métrica de resolução
         // significando "linha de verdade sem planejamento".
         if (!LineCodeKey.looksLikeLine(serviceCode) || coordinates.isZeroZero()) {
-            return RouteAdherence.unresolved();
+            return RouteAdherence.pending();
         }
         List<RoutePath> paths = geometry.pathsFor(serviceCode);
         if (paths.isEmpty()) {
-            return RouteAdherence.unresolved();
+            // Separa o persistente do transitório: sem isso, "veículos sem itinerário"
+            // conta cache frio junto com linha fora do planejamento.
+            return geometry.availabilityFor(serviceCode) == RouteGeometrySource.Availability.NOT_PLANNED
+                    ? RouteAdherence.notPlanned()
+                    : RouteAdherence.pending();
         }
         double best = Double.MAX_VALUE;
         boolean inside = false;

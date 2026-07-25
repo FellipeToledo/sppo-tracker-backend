@@ -44,8 +44,10 @@ class MapViewControllerTest {
         // tracejada, linha no popup, entrada na legenda e contagem no rodapé (§4.4).
         assertThatCode(() -> mockMvc.perform(get("/"))
                 .andExpect(status().isOk())
-                .andExpect(content().string(containsString("ROUTE_UNRESOLVED")))
-                .andExpect(content().string(containsString("sem planejamento")))
+                .andExpect(content().string(containsString("ROUTE_NOT_PLANNED")))
+                .andExpect(content().string(containsString("ROUTE_PENDING")))
+                .andExpect(content().string(containsString("sem planejamento no feed")))
+                .andExpect(content().string(containsString("Aguardando itinerário")))
                 .andExpect(content().string(containsString("dashArray"))))
                 .doesNotThrowAnyException();
     }

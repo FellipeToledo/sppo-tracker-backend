@@ -15,10 +15,16 @@ public enum ClassificationTag {
     STALE,
     OUT_OF_ROUTE,
     /**
-     * Aderência ao itinerário <b>não avaliada</b>: o código é de linha, mas não há
-     * geometria para ele (linha sem planejamento no feed, ou ainda não resolvida).
-     * <b>Não define status</b> — é rótulo, para que "não verificado" não se confunda com
-     * "verificado e dentro da rota". Ver §4.4.
+     * A linha <b>não tem itinerário no feed vigente</b> (resposta autoritativa da fonte de
+     * geometria). Estado <b>persistente</b>: linha suspensa, sazonal, ou que a SMTR ainda
+     * não publicou. <b>Não define status</b> — é rótulo, para que "não verificado" não se
+     * confunda com "verificado e dentro da rota". Ver §4.4.
      */
-    ROUTE_UNRESOLVED
+    ROUTE_NOT_PLANNED,
+    /**
+     * Itinerário <b>ainda não resolvido</b> (cache frio, resolução em background). Estado
+     * <b>transitório</b> — some no próximo ciclo. Separado de {@link #ROUTE_NOT_PLANNED}
+     * porque juntos inflariam o número operacional a cada reinício. Não define status.
+     */
+    ROUTE_PENDING
 }
