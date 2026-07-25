@@ -114,9 +114,9 @@ resta sem fonte de dados é a **geofence de garagem** (polígonos) — §10.
    `RedisCurrentSnapshotStoreIntegrationTest` (JSON + SCAN),
    `RouteDeviationEventRepositoryIntegrationTest` (Flyway V1 + JPA em Postgres real).
    Surefire (`mvn test`) exclui a tag `integration`; Failsafe (`mvn verify`) roda os
-   `*IntegrationTest` — a **CI do GitHub Actions** os executa (tem Docker).
-   ⚠️ **Não foram executados nesta sessão**: o egress bloqueia o pull de imagens
-   Docker aqui; a verificação vem da CI do PR.
+   `*IntegrationTest` — a **CI do GitHub Actions** os executa, e com Docker local
+   `mvn --batch-mode verify` também: **executados e verdes localmente** (5 ITs,
+   2026-07-25) além da CI.
 3. **[ENDEREÇADO] De-para de operadoras populado com dados reais (dois níveis).**
    Saiu do dataset *starter* (prefixo de 4 chars fictício) para **dois de-paras
    reais**: `consortiums.json` (1º caractere da ordem → consórcio; `A`→Intersul,
