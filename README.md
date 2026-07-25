@@ -10,9 +10,20 @@ Monólito modular com **arquitetura hexagonal**. Sem credencial de provider.
 
 - **`docs/regras-de-negocio.md`** — especificação funcional completa (a fonte da
   verdade do domínio: ingestão, classificação, desvio de rota, thresholds).
+- **`docs/estado-do-projeto.md`** — **onde o projeto parou**: o que está pronto, o
+  que foi adiado, débito técnico e a próxima feature. Leia ao retomar o trabalho.
+- **`CLAUDE.md`** — guia curto de arquitetura, comandos e convenções para o agente.
 - **`docs/claude-code-best-practices.md`** — como aproveitar o Claude Code ao
   máximo neste projeto.
-- **`CLAUDE.md`** — guia curto de arquitetura, comandos e convenções para o agente.
+- Deploy: **`docs/deploy-stack.md`** (stack unificado com o `sppo-gtfs-service`) e
+  **`docs/deploy-oracle-cloud.md`** (VM Always Free, passo a passo).
+
+## Serviço irmão
+
+A geometria dos itinerários (shapes do GTFS da SMTR) vem do
+**[`sppo-gtfs-service`](https://github.com/FellipeToledo/sppo-gtfs-service)** — repo
+separado, lido via HTTP e usado para `OUT_OF_ROUTE` (§4.4) e para os eventos de
+desvio (§5). Desligado por default (`ROUTE_SHAPE_SOURCE=disabled`).
 
 ## Stack
 
@@ -55,6 +66,15 @@ segredo. Guia passo a passo (incl. os dois firewalls e HTTPS opcional):
 ```bash
 cp .env.example .env   # troque DB_PASSWORD
 docker compose -f docker-compose.yml -f docker-compose.oracle.yml up -d --build
+```
+
+Para subir **os dois serviços juntos** (backend + `sppo-gtfs-service` + Redis +
+Postgres), em qualquer host com Docker:
+**[`docs/deploy-stack.md`](docs/deploy-stack.md)**.
+
+```bash
+cp .env.stack.example .env.stack   # DB_PASSWORD, GTFS_API_KEY, GCP_PROJECT_ID…
+docker compose -f docker-compose.stack.yml --env-file .env.stack up -d --build
 ```
 
 ## Convenção de commits

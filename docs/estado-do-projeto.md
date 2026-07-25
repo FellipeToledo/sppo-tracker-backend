@@ -30,9 +30,13 @@ scheduler → readiness → cooldown → janela [now-90s, now] → fetch (provid
   permanecem em `com.fasterxml.jackson.annotation`.
 - **Testes:** `mvn --batch-mode test` → **199 testes, 0 falhas** (todos herméticos:
   sem Redis/Postgres/rede reais — usam mocks, `SimpleMeterRegistry`, MockWebServer,
-  `@WebMvcTest`).
-- **Branch de trabalho:** `claude/sppo-tracker-setup-cd7vmo`. **Nenhum PR aberto**
-  ainda (abrir só quando desejado).
+  `@WebMvcTest`). Os de integração (Testcontainers) rodam no `mvn verify` / CI.
+- **Estado do git (2026-07-25):** tudo entregue está em **`main`** (PR #11 mergeado,
+  fatias A/B/C + stack de deploy); nenhum PR aberto; branches mergeadas removidas.
+  A próxima feature (**geofence de garagem**) começa em branch nova a partir de `main`.
+- **Repo irmão:** **`sppo-gtfs-service`** (fonte da verdade da geometria, BigQuery/GTFS
+  da SMTR) — também em `main`, 34 testes verdes. O stack unificado espera os dois
+  repos clonados lado a lado (`docs/deploy-stack.md`).
 
 ## 2. Roadmap — fatias concluídas (1–10)
 
@@ -88,12 +92,13 @@ polígonos de garagem. Por isso ficaram fora:
   a `OutOfRouteRule` entra no classificador. Detalhes na §8.
 - **Regra `GARAGE_GEOFENCE`** — precisa de polígonos GeoJSON de garagem
   (empacotados). A tag já existe; `IN_GARAGE` hoje só é atingido por código de
-  serviço.
-- **Endpoints §7.1 não implementados:** `/api/v1/garages`,
-  `/api/v1/shapes/{id}`, `/api/v1/shapes/{id}/corridor` (dependem de geometria).
+  serviço. ⏭️ **É a próxima feature** — ver §10.
+- **Endpoints §7.1 não implementados:** `/api/v1/garages` (sai com a geofence),
+  `/api/v1/shapes/{id}`, `/api/v1/shapes/{id}/corridor` (expor a geometria já
+  resolvida do `gtfs-service`).
 
-**Para destravar §5/OUT_OF_ROUTE/geofence:** decidir a fonte de itinerário
-(GTFS/`shape-geom` próprio) — ver §10 e TODO de `docs/regras-de-negocio.md`.
+**OUT_OF_ROUTE e §5 já estão destravados** pelo `sppo-gtfs-service` (§8/§9). O que
+resta sem fonte de dados é a **geofence de garagem** (polígonos) — §10.
 
 ## 5. DÉBITO TÉCNICO
 
@@ -156,8 +161,10 @@ polígonos de garagem. Por isso ficaram fora:
 
 ## 7. Próximos passos sugeridos (ordem de valor/viabilidade)
 
-1. **Fechar débito técnico** (escolher (a) Testcontainers, (b) `contextLoads` leve,
-   ou (c) manter como TODO).
+0. ⏭️ **Geofence de garagem (`GARAGE_GEOFENCE`, §4.3)** — **próxima feature
+   escolhida**. Escopo e pré-requisitos na §10 deste documento.
+1. ~~**Fechar débito técnico**~~ **Feito** — ver §5 (contexto Spring + ITs
+   Testcontainers na CI).
 2. ~~**Popular `operators.json`** com dados reais.~~ **Feito** (de-para por
    consórcio, 1º caractere da ordem — ver §5, débito 3).
 3. ~~**Deploy** na VM Oracle Cloud (docker compose).~~ **Artefatos prontos:**
@@ -168,10 +175,12 @@ polígonos de garagem. Por isso ficaram fora:
    + guia **`docs/deploy-stack.md`** (espera os dois repos clonados lado a lado; segredos
    em `secrets/`, fora do git). Falta só provisionar o host (Oracle bloqueado no signup;
    alternativas avaliadas: Contabo/Hetzner/Fly.io).
-4. ~~**Fonte de shapes** para destravar OUT_OF_ROUTE.~~ **Feito (fatia A)** — ver §8.
-   Falta destravar **§5 (máquina de desvio)** reusando a mesma geometria, e a
-   **geofence de garagem**.
-5. **CI** (GitHub Actions: build/test → imagem → deploy).
+4. ~~**Fonte de shapes** para destravar OUT_OF_ROUTE.~~ **Feito (fatia A)** — ver §8;
+   ~~**§5 (máquina de desvio)**~~ **feita (fatia B)** — ver §9. Resta a
+   **geofence de garagem** (§10).
+5. **CI** — `mvn --batch-mode verify` (unitários + ITs Testcontainers) roda em push/PR
+   para `main` (`.github/workflows/ci.yml`), com Dependabot semanal (Maven + Actions).
+   Falta o passo de **imagem + deploy** (depende do host provisionado).
 
 ---
 
@@ -192,7 +201,9 @@ shapes da linha (`serviceCode`).
 - **Aplicação:** `ResolveRouteShapesPort` (out), `ResolvedShapes`, `RouteGeometryCache`
   — cache assíncrono **bounded** e stale-while-revalidate: o hot path só lê o que já
   está resolvido; a resolução (I/O) roda em executor de background; sob pico o excesso
-  é descartado e re-tentado (§4.4).
+  é descartado e re-tentado (§4.4). Resultado **vazio** expira em TTL curto
+  (`GPS_ROUTE_SHAPE_EMPTY_CACHE_TTL`, 5 min) para não congelar a linha por 6 h quando o
+  gtfs-service está momentaneamente sem índice.
 - **Infra:** `SppoGtfsShapeProvider` (WebClient → `GET /api/v1/lines/{lineCode}/shapes`,
   decodifica encoded polyline; 404/no_shapes ⇒ vazio autoritativo; falha ⇒ retry),
   `EncodedPolyline` (decoder Google precisão 5), `RouteAdherenceConfig` +
@@ -249,5 +260,45 @@ nenhum bean é criado — comportamento inalterado.
   Micrometer por evento emitido) em `/actuator/prometheus`.
 - Observação = posições **mudadas** (o stream publicado já é pós-dedup/mudança); posições
   idênticas repetidas não contam como novos pontos.
-- Não exercitado com `shape-source=gtfs-service` em teste hermético (precisa de
+- ⚠️ Não exercitado com `shape-source=gtfs-service` em teste hermético (precisa de
   Redis/JPA/WebClient) — validação vem da CI/integração ou do run local.
+
+---
+
+## 10. Próxima feature — geofence de garagem (`GARAGE_GEOFENCE`, §4.3)
+
+Terreno preparado; **nada implementado ainda**. O que já existe a favor:
+
+- A tag **`GARAGE_GEOFENCE` já existe** em `ClassificationTag` e a **precedência já
+  está pronta** no `PositionClassifier`: `IN_GARAGE || GARAGE_GEOFENCE` ⇒ status
+  `IN_GARAGE` (3º na ordem, §4.2). As flags §4.5 (`insideGarage`) também já cobrem.
+- Existe **padrão a copiar** para dado empacotado: `PackagedOperatorDirectory`
+  (+ `OperatorDirectoryPort`, `OperatorConfig`) carrega JSON de `resources/` no boot.
+- Existe **geometria pronta a reusar** em `domain/route/Geo` (haversine, distância
+  ponto→segmento) e o padrão de pré-filtro por bounding box em `RoutePath`.
+
+**Peças a criar (ordem sugerida, TDD):**
+
+1. `domain/vehicle/GaragePolygon` (ou `domain/geo/`): polígono imutável auto-validado
+   + **ponto-em-polígono** (ray casting) com **pré-filtro por bbox** — teste primeiro.
+2. `GarageGeofenceRule implements ClassificationRule` → devolve `GARAGE_GEOFENCE`
+   quando a coordenada cai em qualquer polígono; **neutra** sem polígonos carregados
+   (mesmo contrato defensivo da `OutOfRouteRule`).
+3. Porta `GarageDirectoryPort` (out) + `PackagedGarageDirectory` lendo
+   `resources/garages.geojson` (FeatureCollection de `Polygon`/`MultiPolygon`).
+4. Wiring em `ClassificationConfig` + propriedades `gps.geofence.garages.*`
+   (`enabled`, caminho do arquivo) — **desligado por default** enquanto não houver
+   polígonos reais, para não mudar a classificação atual.
+5. `GET /api/v1/garages` (§7.1) devolvendo nome + geometria; destaque opcional no mapa.
+6. Atualizar `docs/regras-de-negocio.md` §4.3/§7.1/§8 e este documento no mesmo PR.
+
+**Pré-requisito de dados (a decidir antes de codar):** de onde vêm os polígonos?
+- (a) Dataset público (data.rio / SMTR), se houver camada de garagens/pátios;
+- (b) desenhar à mão (geojson.io) a partir dos endereços das garagens das empresas
+  do `companies.json`;
+- (c) **derivar dos próprios dados**: agrupar posições históricas com `serviceCode`
+  de garagem (`GARAGEM`, `1 GAR`) e extrair o envelope de cada cluster — viável via
+  BigQuery no histórico da SMTR, e o que melhor casa com a frota real.
+
+Sem os polígonos, a feature entrega o mecanismo (regra + porta + testes) com o dado
+vazio; `IN_GARAGE` continua vindo só do código de serviço até o GeoJSON entrar.
