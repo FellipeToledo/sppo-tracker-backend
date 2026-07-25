@@ -19,12 +19,11 @@ public enum ClassificationTag {
      * geometria). Estado <b>persistente</b>: linha suspensa, sazonal, ou que a SMTR ainda
      * não publicou. <b>Não define status</b> — é rótulo, para que "não verificado" não se
      * confunda com "verificado e dentro da rota". Ver §4.4.
+     *
+     * <p>O caso <b>transitório</b> (geometria ainda não resolvida) <b>não</b> tem tag: é
+     * estado interno ({@code RouteAdherence.PENDING}), porque o rótulo é gravado no
+     * snapshot no momento da classificação e ficaria desatualizado — mostraria "sem
+     * itinerário" para veículo cuja geometria já chegou. Só se expõe o que é estável.
      */
-    ROUTE_NOT_PLANNED,
-    /**
-     * Itinerário <b>ainda não resolvido</b> (cache frio, resolução em background). Estado
-     * <b>transitório</b> — some no próximo ciclo. Separado de {@link #ROUTE_NOT_PLANNED}
-     * porque juntos inflariam o número operacional a cada reinício. Não define status.
-     */
-    ROUTE_PENDING
+    ROUTE_NOT_PLANNED
 }

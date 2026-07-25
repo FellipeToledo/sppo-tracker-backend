@@ -56,12 +56,13 @@ class OutOfRouteRuleTest {
     }
 
     @Test
-    void shouldTagPendingWhenGeometryWasNotResolvedYet() {
-        // Fonte sem a distinção (default do port) ⇒ conservador: PENDING, nunca afirma
-        // que a linha está fora do planejamento.
+    void shouldNotTagWhileGeometryIsStillBeingResolved() {
+        // Estado transitório NÃO é exposto: o rótulo iria para o snapshot e envelheceria,
+        // mostrando "sem itinerário" para veículo cuja geometria já chegou. Fonte sem a
+        // distinção (default do port) responde PENDING — logo, sem tag.
         OutOfRouteRule rule = ruleWith(service -> List.of());
         var tags = rule.evaluate(positionAt("100", at(-22.9020, -43.1950)), NOW);
-        assertThat(tags).containsExactly(ClassificationTag.ROUTE_PENDING);
+        assertThat(tags).isEmpty();
     }
 
     @Test

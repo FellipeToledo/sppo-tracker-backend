@@ -7,6 +7,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.model;
@@ -45,10 +46,10 @@ class MapViewControllerTest {
         assertThatCode(() -> mockMvc.perform(get("/"))
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("ROUTE_NOT_PLANNED")))
-                .andExpect(content().string(containsString("ROUTE_PENDING")))
                 .andExpect(content().string(containsString("sem planejamento no feed")))
-                .andExpect(content().string(containsString("Aguardando itinerário")))
-                .andExpect(content().string(containsString("dashArray"))))
+                .andExpect(content().string(containsString("dashArray")))
+                // O transitório é interno: não pode vazar para a view.
+                .andExpect(content().string(not(containsString("ROUTE_PENDING")))))
                 .doesNotThrowAnyException();
     }
 }

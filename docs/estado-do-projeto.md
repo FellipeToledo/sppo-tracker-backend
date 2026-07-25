@@ -272,10 +272,15 @@ Duas frestas foram fechadas nesta rodada:
    dentro do corredor. Agora é rotulada, e em **duas categorias distintas** (§4.3/§4.4),
    ambas rótulo e não status:
 
-   | tag | significado | natureza | no mapa |
+   | estado | significado | natureza | exposto? |
    |---|---|---|---|
-   | `ROUTE_NOT_PLANNED` | a fonte respondeu que a linha **não tem itinerário no feed vigente** | **persistente** — é o número operacional | borda **tracejada** |
-   | `ROUTE_PENDING` | geometria **ainda não resolvida** (cache frio, background) | **transitório** — cai nos próximos ciclos | marcador **esmaecido** |
+   | tag `ROUTE_NOT_PLANNED` | a fonte respondeu que a linha **não tem itinerário no feed vigente** | **persistente** — é o número operacional | **sim** (payload + borda tracejada no mapa) |
+   | `RouteAdherence.PENDING` | geometria **ainda não resolvida** (cache frio, background) | **transitório** | **não** — só interno |
+
+   Por que o transitório não é exposto: o rótulo é gravado no snapshot no instante da
+   classificação e envelhece. Medido em produção: **324** posições marcadas, das quais
+   **190 das 237 linhas já tinham geometria resolvida** — o rótulo estava velho, não a
+   realidade. Expor só o estável evita número enganoso.
 
    Quem sabe a diferença é o `RouteGeometryCache`: **sem entrada** = nunca resolvi
    (`PENDING`); **entrada vazia** = a fonte respondeu que não há itinerário

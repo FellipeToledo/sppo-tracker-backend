@@ -133,8 +133,8 @@ regras).
 > inclusive quando falta dado para avaliar alguma regra. O único ponto de perda é o
 > registro **malformado** do feed (sem coordenada válida, logo sem o que plotar), e
 > mesmo esse é **contado** em `gps.provider.records{result=malformed}`. Quando não há
-> itinerário para avaliar, a posição é rotulada — `ROUTE_NOT_PLANNED` ou `ROUTE_PENDING`
-> (§4.4) — em vez de passar como se estivesse na rota.
+> itinerário para avaliar, a posição é rotulada `ROUTE_NOT_PLANNED` (§4.4) em vez de passar
+> como se estivesse na rota.
 
 ### 4.1 Status possíveis
 `IN_OPERATION`, `IN_GARAGE`, `OUT_OF_MUNICIPALITY`, `OUT_OF_ROUTE`,
@@ -166,7 +166,6 @@ tags).
 | **Posição obsoleta (stale)** | `STALE` | `positionTimestamp + threshold < now` | threshold default **5 min** |
 | **Fora de rota** | `OUT_OF_ROUTE` | fora do corredor de **todos** os shapes da rota | ver 4.4 |
 | **Sem planejamento** | `ROUTE_NOT_PLANNED` | código **é de linha** e a fonte respondeu que ela **não tem itinerário no feed vigente** | rótulo; **não** define status |
-| **Itinerário pendente** | `ROUTE_PENDING` | código **é de linha** e a geometria **ainda não foi resolvida** (cache frio, background) | rótulo transitório; **não** define status |
 
 **Normalização do `serviceCode`** (para as regras de código): remover acentos,
 `trim`, colapsar espaços, upper-case. Compara contra os conjuntos acima.
@@ -204,11 +203,14 @@ como dentro. Lacuna medida e ressalvas em `docs/estado-do-projeto.md` §10.
   como não verificada**. Sem isso apareceria como `IN_OPERATION`/`onRoute` — indistinguível
   de um veículo de fato conferido dentro do corredor.
   - `ROUTE_NOT_PLANNED` — a fonte respondeu de forma **autoritativa** que a linha não tem
-    itinerário no feed vigente. **Persistente**: é o número que serve para operação.
-  - `ROUTE_PENDING` — geometria **ainda não resolvida** (cache frio, resolução em
-    background, executor saturado). **Transitório**: cai sozinho nos próximos ciclos.
-  - Juntá-los faria a contagem de "veículos sem itinerário" inflar a cada reinício do
-    serviço (medido: 170 no 1º ciclo → 59 em 6 min, sendo a maior parte cache frio).
+    itinerário no feed vigente. **Persistente**, e o único rótulo **exposto**: é o número
+    que serve para operação.
+  - O caso **transitório** (geometria ainda não resolvida: cache frio, resolução em
+    background, executor saturado) é **estado interno** — `RouteAdherence.PENDING` — e
+    **não** vira tag. Motivo: o rótulo é gravado no snapshot no instante da classificação
+    e envelheceria, mostrando "sem itinerário" para veículo cuja geometria já chegou
+    (medido: 324 rótulos assim, sendo 190 das 237 linhas já resolvidas). A distinção
+    continua existindo no domínio, via `RouteGeometrySource.availabilityFor()`.
   - Código que não é linha (`GARAGEM`, `ESPECIAL`) não recebe rótulo: não há itinerário a
     avaliar. Quem não sabe distinguir (implementação simples da porta) responde
     `PENDING` — **nunca** afirma que a linha está fora do planejamento.
@@ -222,8 +224,9 @@ Além do status, a classificação expõe booleans para consumo/filtragem:
 `valid`, `insideMunicipality`, `insideGarage`, `onRoute` + o conjunto de `tags`.
 
 ⚠️ **`onRoute` é booleano e não sabe dizer "não sei".** Leia junto com as tags: com
-`ROUTE_NOT_PLANNED` ou `ROUTE_PENDING` presente, `onRoute=true` significa apenas *"não foi
-constatado fora da rota"*, não *"conferido na rota"*. Quem precisa da distinção usa a tag.
+`ROUTE_NOT_PLANNED` presente, `onRoute=true` significa apenas *"não foi constatado fora da
+rota"*. E como o caso transitório não é rotulado, a ausência da tag também não garante
+"conferido na rota" — garante apenas que a linha tem itinerário no feed.
 
 | Status | valid | insideMunicipality | insideGarage | onRoute |
 |---|---|---|---|---|

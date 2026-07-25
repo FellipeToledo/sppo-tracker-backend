@@ -43,23 +43,16 @@ class PositionClassifierTest {
     }
 
     @Test
-    void routeLabelsDoNotChangeStatus() {
-        // As duas tags dizem "aderência não avaliada" — são rótulo, não status.
-        for (ClassificationTag tag : List.of(ClassificationTag.ROUTE_NOT_PLANNED,
-                ClassificationTag.ROUTE_PENDING)) {
-            var classification = classifierWith(tag).classify(anyPosition(), NOW);
-            assertThat(classification.status())
-                    .as("tag %s", tag)
-                    .isEqualTo(VehiclePositionStatus.IN_OPERATION);
-            assertThat(classification.tags()).containsExactly(tag);
-        }
+    void routeNotPlannedIsALabelAndDoesNotChangeStatus() {
+        var classification = classifierWith(ClassificationTag.ROUTE_NOT_PLANNED)
+                .classify(anyPosition(), NOW);
+        assertThat(classification.status()).isEqualTo(VehiclePositionStatus.IN_OPERATION);
+        assertThat(classification.tags()).containsExactly(ClassificationTag.ROUTE_NOT_PLANNED);
     }
 
     @Test
-    void outOfRouteStillWinsOverTheRouteLabels() {
+    void outOfRouteStillWinsOverRouteNotPlanned() {
         assertThat(statusFor(ClassificationTag.OUT_OF_ROUTE, ClassificationTag.ROUTE_NOT_PLANNED))
-                .isEqualTo(VehiclePositionStatus.OUT_OF_ROUTE);
-        assertThat(statusFor(ClassificationTag.OUT_OF_ROUTE, ClassificationTag.ROUTE_PENDING))
                 .isEqualTo(VehiclePositionStatus.OUT_OF_ROUTE);
     }
 
