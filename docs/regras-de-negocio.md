@@ -537,3 +537,10 @@ Com `mem_limit: 1g` por container, isso cabe, mas exige decisão explícita: ser
 sob demanda por linha (em vez de índice completo), ou mover a atribuição para o
 `sppo-gtfs-service`, que já tem a geometria. **Não** dimensionar por estimativa: medir de
 novo no feed vigente antes de implementar.
+
+**Base já pronta, não mergeada:** a branch `feat/segment-exclusions` do `sppo-gtfs-service`
+carrega os segmentos com os flags para dentro do índice e os expõe no payload por shape
+(porta `loadShapeSegments`, query do `segmento_shape` com a mesma seleção de feed/lookback,
+`RouteSegment` no domínio, 74 testes verdes). Ficou **fora da `main` de propósito**: soma
+1,65× ao payload de todo shape e não tem consumidor enquanto esta fatia não existir. Falta
+nela apenas a geometria do `buffer` tratado, que é o que a atribuição ponto→segmento exige.
