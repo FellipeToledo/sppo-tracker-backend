@@ -147,7 +147,7 @@ tags).
 |---|---|---|---|
 | **Coordenadas inválidas** | `INVALID_COORDINATES` | posição é exatamente (0, 0) | — |
 | **Fora do município** | `OUT_OF_MUNICIPALITY` | fora do bounding box do Rio | box: lat [-23.10, -22.70], lon [-43.80, -43.05] (configurável) |
-| **Garagem (geofence)** | `GARAGE_GEOFENCE` | dentro de um polígono de garagem | polígonos GeoJSON empacotados |
+| **Garagem (geofence)** | `GARAGE_GEOFENCE` | dentro de um polígono de garagem | polígonos GeoJSON empacotados (`resources/garages.geojson`) |
 | **Código de serviço — garagem** | `IN_GARAGE` | `serviceCode` ∈ conjunto de garagem | `GARAGEM`, `1 GAR` |
 | **Código de serviço — suspeito** | `SUSPICIOUS_SERVICE_CODE` | `serviceCode` ∈ conjunto suspeito | `MANUTENCAO`, `MANUT`, `VISTORIA`, `FORA DE OP`, `FORA OP`, `FORA DE OPERACAO`, `TREINO`, `TREINA`, `OPER.`, `00000` |
 | **Posição obsoleta (stale)** | `STALE` | `positionTimestamp + threshold < now` | threshold default **5 min** |
@@ -157,6 +157,12 @@ tags).
 `trim`, colapsar espaços, upper-case. Compara contra os conjuntos acima.
 
 **IN_GARAGE** é atingido por geofence **ou** por código de serviço de garagem.
+
+**Origem dos polígonos de garagem:** derivados do histórico público de GPS da SMTR
+(`gps_sppo`, coluna `tipo_parada = 'garagem'`) por clusterização — a camada oficial
+`garagem_polygon` da SMTR é uma view sobre um projeto de staging sem acesso público.
+Query e limiares em `docs/sql/derive-garages.sql`; ressalvas do dado em
+`docs/estado-do-projeto.md` §10. São 35 polígonos, sem nome de empresa (a fonte não traz).
 
 ### 4.4 Regra OUT_OF_ROUTE (resolução de geometria)
 - **Não confia no `shapeId` do payload** (vem trocado ida/volta com frequência).

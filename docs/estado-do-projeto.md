@@ -292,13 +292,26 @@ Terreno preparado; **nada implementado ainda**. O que já existe a favor:
 5. `GET /api/v1/garages` (§7.1) devolvendo nome + geometria; destaque opcional no mapa.
 6. Atualizar `docs/regras-de-negocio.md` §4.3/§7.1/§8 e este documento no mesmo PR.
 
-**Pré-requisito de dados (a decidir antes de codar):** de onde vêm os polígonos?
-- (a) Dataset público (data.rio / SMTR), se houver camada de garagens/pátios;
-- (b) desenhar à mão (geojson.io) a partir dos endereços das garagens das empresas
-  do `companies.json`;
-- (c) **derivar dos próprios dados**: agrupar posições históricas com `serviceCode`
-  de garagem (`GARAGEM`, `1 GAR`) e extrair o envelope de cada cluster — viável via
-  BigQuery no histórico da SMTR, e o que melhor casa com a frota real.
+**Pré-requisito de dados: RESOLVIDO** — `src/main/resources/garages.geojson` já está no
+repo (35 polígonos, 482 vértices, ~36 KB).
 
-Sem os polígonos, a feature entrega o mecanismo (regra + porta + testes) com o dado
-vazio; `IN_GARAGE` continua vindo só do código de serviço até o GeoJSON entrar.
+O que foi investigado (2026-07-25):
+- A camada **oficial** `rj-smtr.br_rj_riodejaneiro_geo.garagem_polygon` existe, mas é uma
+  **VIEW sobre `rj-smtr-staging`**, que não é público → `Access Denied`. Descartada.
+- Nada equivalente em `datario.dados_mestres` / `transporte_rodoviario_municipal`.
+- ✅ **Fonte adotada:** o histórico público `rj-smtr.br_rj_riodejaneiro_veiculos.gps_sppo`
+  tem a coluna **`tipo_parada`**, que é a *própria classificação da SMTR* de veículo parado
+  em garagem/terminal. Filtrando `tipo_parada = 'garagem'` e clusterizando os pontos
+  reconstruímos as geofences: grid de ~11 m → `ST_CLUSTERDBSCAN(80 m, 5)` → `ST_CONVEXHULL`.
+  Query comentada (com o porquê de cada limiar) em **`docs/sql/derive-garages.sql`**.
+
+Números medidos: 30 dias de partição = 5,66 GiB varridos ≈ **US$ 0,028**; 5,1 M pontos de
+`garagem`/semana em ~3,9 mil veículos; 45 clusters brutos → **35** após os filtros de
+densidade e área (10 mil–110 mil m² nas maiores, compatível com pátio de ônibus).
+
+⚠️ Ressalvas do dado: (1) a geometria é *convex hull* dos pontos observados — cobre o pátio
+de forma um pouco generosa e fecha concavidades; (2) a tabela estava defasada (última
+partição **2026-04-29**), o que é irrelevante para garagem, mas significa que garagem nova
+só aparece após a SMTR publicar; (3) sem nome/empresa por polígono (a fonte não traz) — os
+IDs são `g00…g34`. Como `IN_GARAGE` tem precedência alta (§4.2), começar com a regra
+**desligada por default** e conferir no mapa antes de ligar.
