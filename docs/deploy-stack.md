@@ -31,9 +31,11 @@ cd sppo-tracker-backend
 cp .env.stack.example .env.stack
 # edite .env.stack: DB_PASSWORD, GTFS_API_KEY, GCP_PROJECT_ID, ...
 
-# 2. Credenciais do GCP (BigQuery real)
-mkdir -p secrets
-cp /caminho/da/sua-sa.json secrets/gcp-sa.json     # montado read-only em /secrets
+# 2. Credenciais do GCP (BigQuery real) — FORA da árvore do repo
+mkdir -p ~/.secrets/sppo-gtfs
+cp /caminho/da/sua-sa.json ~/.secrets/sppo-gtfs/gcp-sa.json
+# e no .env.stack: GCP_SECRETS_DIR=/caminho/absoluto/para/.secrets/sppo-gtfs
+# (o compose monta esse diretório read-only em /secrets; o arquivo precisa se chamar gcp-sa.json)
 
 # 3. Subir
 docker compose -f docker-compose.stack.yml --env-file .env.stack up -d --build
@@ -48,7 +50,8 @@ Abra o mapa em `http://SEU_HOST:8090/` (ajuste `SERVER_PORT` no `.env.stack`).
 ### Sem BigQuery (só para experimentar)
 
 Defina `GTFS_PROFILE=demo` no `.env.stack` — o gtfs-service sobe com um loader de amostra
-em memória, sem credenciais. O `secrets/` pode ficar vazio (só precisa existir).
+em memória, sem credenciais. O diretório de `GCP_SECRETS_DIR` pode ficar vazio (só precisa
+existir, porque o compose o monta).
 
 ## Configuração (`.env.stack`)
 
@@ -64,8 +67,12 @@ em memória, sem credenciais. O `secrets/` pode ficar vazio (só precisa existir
 | `BIGQUERY_LOCATION` | região de processamento | `US` |
 | `GTFS_ADMIN_KEY` | chave do `/internal/reload` do gtfs | — |
 | `GTFS_SERVICE_PATH` | build context do gtfs-service | `../sppo-gtfs-service` |
+| `GCP_SECRETS_DIR` | diretório com `gcp-sa.json`, montado read-only em `/secrets` | `./secrets` |
 
-Credenciais (`.env.stack`, `secrets/`) **não** vão para o git (ver `.gitignore`).
+**Credenciais:** o `.env.stack` e o `secrets/` são ignorados pelo git (ver `.gitignore`),
+mas o recomendado é manter a chave do GCP **fora da árvore do repo** e apontar
+`GCP_SECRETS_DIR` para lá (caminho absoluto) — assim ela nunca depende do `.gitignore`
+para não ser comitada.
 
 ## Recursos / memória
 

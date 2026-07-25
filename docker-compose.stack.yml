@@ -9,7 +9,8 @@
 #
 # Uso:
 #   cp .env.stack.example .env.stack   &&   editar valores
-#   mkdir -p secrets   &&   colocar a chave do GCP em secrets/gcp-sa.json (BigQuery real)
+#   chave do GCP em $GCP_SECRETS_DIR/gcp-sa.json (BigQuery real) — de preferência fora
+#     da árvore do repo, ex.: GCP_SECRETS_DIR=~/.secrets/sppo-gtfs (caminho absoluto)
 #   docker compose -f docker-compose.stack.yml --env-file .env.stack up -d --build
 #
 # O backend é o único exposto ao host; o gtfs-service fica interno (rede do compose).
@@ -50,8 +51,10 @@ services:
       GTFS_API_KEY: ${GTFS_API_KEY:-}
       GTFS_ADMIN_KEY: ${GTFS_ADMIN_KEY:-}
     volumes:
-      # Diretório de segredos (crie ./secrets e coloque gcp-sa.json). Montado read-only.
-      - ./secrets:/secrets:ro
+      # Diretório de segredos, montado read-only. Prefira apontar GCP_SECRETS_DIR para
+      # FORA da árvore do repo (ex.: ~/.secrets/sppo-gtfs) — a chave nunca precisa
+      # conviver com o código. O default ./secrets é só conveniência.
+      - ${GCP_SECRETS_DIR:-./secrets}:/secrets:ro
     mem_limit: 1g
     restart: unless-stopped
 

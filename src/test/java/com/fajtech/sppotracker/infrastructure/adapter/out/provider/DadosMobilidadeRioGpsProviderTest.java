@@ -3,9 +3,9 @@ package com.fajtech.sppotracker.infrastructure.adapter.out.provider;
 import com.fajtech.sppotracker.domain.vehicle.VehiclePosition;
 import com.fajtech.sppotracker.infrastructure.config.DadosRioProviderProperties;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
-import okhttp3.mockwebserver.MockResponse;
-import okhttp3.mockwebserver.MockWebServer;
-import okhttp3.mockwebserver.RecordedRequest;
+import mockwebserver3.MockResponse;
+import mockwebserver3.MockWebServer;
+import mockwebserver3.RecordedRequest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -58,19 +58,19 @@ class DadosMobilidadeRioGpsProviderTest {
 
     @AfterEach
     void tearDown() throws IOException {
-        server.shutdown();
+        server.close();
     }
 
     @Test
     void shouldFetchAndMapPositions() throws InterruptedException {
-        server.enqueue(new MockResponse()
+        server.enqueue(new MockResponse.Builder()
                 .setHeader("Content-Type", "application/json")
-                .setBody("""
+                .body("""
                         [
                           {"ordem":"A12345","latitude":"-22,89206","longitude":"-43,17654",
                            "datahora":"1690000000000","velocidade":"23,5","linha":"100",
                            "datahoraenvio":"1690000002000","datahoraservidor":"1690000005000"}
-                        ]"""));
+                        ]""").build());
 
         List<VehiclePosition> result = provider.fetch(FROM, TO);
 
@@ -79,9 +79,9 @@ class DadosMobilidadeRioGpsProviderTest {
         assertThat(result.get(0).serviceCode()).isEqualTo("100");
 
         RecordedRequest request = server.takeRequest();
-        assertThat(request.getRequestUrl().encodedPath()).isEqualTo("/gps/sppo");
-        assertThat(request.getRequestUrl().queryParameter("dataInicial")).isEqualTo("2026-07-22 09:00:00");
-        assertThat(request.getRequestUrl().queryParameter("dataFinal")).isEqualTo("2026-07-22 09:01:30");
+        assertThat(request.getUrl().encodedPath()).isEqualTo("/gps/sppo");
+        assertThat(request.getUrl().queryParameter("dataInicial")).isEqualTo("2026-07-22 09:00:00");
+        assertThat(request.getUrl().queryParameter("dataFinal")).isEqualTo("2026-07-22 09:01:30");
 
         // métricas: sucesso, timer e janela (90s) registrados
         assertThat(requests("success")).isEqualTo(1.0);
@@ -91,9 +91,9 @@ class DadosMobilidadeRioGpsProviderTest {
 
     @Test
     void shouldKeepGoodItemsWhenOneIsMalformed() {
-        server.enqueue(new MockResponse()
+        server.enqueue(new MockResponse.Builder()
                 .setHeader("Content-Type", "application/json")
-                .setBody("""
+                .body("""
                         [
                           {"ordem":"A1","latitude":"-22,9","longitude":"-43,1",
                            "datahora":"1690000000000","velocidade":"10","linha":"100",
@@ -101,7 +101,7 @@ class DadosMobilidadeRioGpsProviderTest {
                           {"ordem":"A2","latitude":"abc","longitude":"-43,1",
                            "datahora":"1690000000000","velocidade":"10","linha":"100",
                            "datahoraenvio":"1690000002000","datahoraservidor":"1690000005000"}
-                        ]"""));
+                        ]""").build());
 
         List<VehiclePosition> result = provider.fetch(FROM, TO);
 
@@ -110,9 +110,9 @@ class DadosMobilidadeRioGpsProviderTest {
 
     @Test
     void shouldReturnEmptyListForEmptyResponse() {
-        server.enqueue(new MockResponse()
+        server.enqueue(new MockResponse.Builder()
                 .setHeader("Content-Type", "application/json")
-                .setBody("[]"));
+                .body("[]").build());
 
         assertThat(provider.fetch(FROM, TO)).isEmpty();
     }
@@ -120,14 +120,14 @@ class DadosMobilidadeRioGpsProviderTest {
     @Test
     void shouldParseJsonEvenWhenContentTypeIsTextHtml() {
         // A SMTR frequentemente devolve JSON válido rotulado como text/html.
-        server.enqueue(new MockResponse()
+        server.enqueue(new MockResponse.Builder()
                 .setHeader("Content-Type", "text/html;charset=utf-8")
-                .setBody("""
+                .body("""
                         [
                           {"ordem":"B7","latitude":"-22,9","longitude":"-43,1",
                            "datahora":"1690000000000","velocidade":"10","linha":"483",
                            "datahoraenvio":"1690000002000","datahoraservidor":"1690000005000"}
-                        ]"""));
+                        ]""").build());
 
         List<VehiclePosition> result = provider.fetch(FROM, TO);
 
@@ -142,9 +142,9 @@ class DadosMobilidadeRioGpsProviderTest {
         String errorPage = "<html><head><title>Service Unavailable</title></head>"
                 + "<body><h2>Service Unavailable</h2></body></html>";
         for (int i = 0; i < 3; i++) {
-            server.enqueue(new MockResponse()
+            server.enqueue(new MockResponse.Builder()
                     .setHeader("Content-Type", "text/html;charset=utf-8")
-                    .setBody(errorPage));
+                    .body(errorPage).build());
         }
 
         assertThatThrownBy(() -> provider.fetch(FROM, TO)).isInstanceOf(RuntimeException.class);
@@ -156,17 +156,17 @@ class DadosMobilidadeRioGpsProviderTest {
     @Test
     void shouldRecoverWhenHtmlErrorPageIsFollowedByValidJson() {
         // Primeira resposta é a página HTML de erro (transitória); o retry alcança JSON.
-        server.enqueue(new MockResponse()
+        server.enqueue(new MockResponse.Builder()
                 .setHeader("Content-Type", "text/html;charset=utf-8")
-                .setBody("<html><body>Service Unavailable</body></html>"));
-        server.enqueue(new MockResponse()
+                .body("<html><body>Service Unavailable</body></html>").build());
+        server.enqueue(new MockResponse.Builder()
                 .setHeader("Content-Type", "text/html;charset=utf-8")
-                .setBody("""
+                .body("""
                         [
                           {"ordem":"C9","latitude":"-22,9","longitude":"-43,1",
                            "datahora":"1690000000000","velocidade":"10","linha":"550",
                            "datahoraenvio":"1690000002000","datahoraservidor":"1690000005000"}
-                        ]"""));
+                        ]""").build());
 
         List<VehiclePosition> result = provider.fetch(FROM, TO);
 
@@ -178,9 +178,9 @@ class DadosMobilidadeRioGpsProviderTest {
     @Test
     void shouldRetryOnServerErrorAndFailWhenExhausted() {
         // retry-max-attempts=2 → 3 tentativas totais
-        server.enqueue(new MockResponse().setResponseCode(500));
-        server.enqueue(new MockResponse().setResponseCode(500));
-        server.enqueue(new MockResponse().setResponseCode(500));
+        server.enqueue(new MockResponse.Builder().code(500).build());
+        server.enqueue(new MockResponse.Builder().code(500).build());
+        server.enqueue(new MockResponse.Builder().code(500).build());
 
         assertThatThrownBy(() -> provider.fetch(FROM, TO)).isInstanceOf(RuntimeException.class);
         assertThat(server.getRequestCount()).isEqualTo(3);
@@ -190,7 +190,7 @@ class DadosMobilidadeRioGpsProviderTest {
 
     @Test
     void shouldNotRetryOnBadRequest() {
-        server.enqueue(new MockResponse().setResponseCode(400));
+        server.enqueue(new MockResponse.Builder().code(400).build());
 
         assertThatThrownBy(() -> provider.fetch(FROM, TO)).isInstanceOf(RuntimeException.class);
         assertThat(server.getRequestCount()).isEqualTo(1);

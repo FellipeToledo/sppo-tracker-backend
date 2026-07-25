@@ -91,10 +91,12 @@
             <artifactId>spring-boot-starter-webmvc-test</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- MockWebServer 5.x: o pacote passou a ser mockwebserver3 (MockResponse imutável
+             com Builder). Ver DadosMobilidadeRioGpsProviderTest. -->
         <dependency>
             <groupId>com.squareup.okhttp3</groupId>
-            <artifactId>mockwebserver</artifactId>
-            <version>4.12.0</version>
+            <artifactId>mockwebserver3</artifactId>
+            <version>5.4.0</version>
             <scope>test</scope>
         </dependency>
         <dependency>
