@@ -31,12 +31,13 @@ scheduler → readiness → cooldown → janela [now-90s, now] → fetch (provid
 - **Testes:** `mvn --batch-mode test` → **256 testes, 0 falhas** (todos herméticos:
   sem Redis/Postgres/rede reais — usam mocks, `SimpleMeterRegistry`, MockWebServer,
   `@WebMvcTest`). Os de integração (Testcontainers) rodam no `mvn verify` / CI.
-- **Estado do git (2026-07-25):** `main` tem as fatias A/B/C + stack de deploy (PR #11
-  mergeado) e a higiene pré-feature. A **geofence de garagem** (§10) está na branch
-  `feat/garage-geofence`, pronta para PR.
+- **Estado do git (2026-07-26):** `main` tem **tudo** — fatias A/B/C, stack de deploy
+  (PR #11), a **geofence de garagem** (§10, PR #12) e o corredor de 20 m (PR #13).
+  Nada pendente de merge; árvore limpa e sincronizada com `origin/main`.
 - **Repo irmão:** **`sppo-gtfs-service`** (fonte da verdade da geometria, BigQuery/GTFS
-  da SMTR) — também em `main`, 34 testes verdes. O stack unificado espera os dois
-  repos clonados lado a lado (`docs/deploy-stack.md`).
+  da SMTR) — também em `main`, **74 testes verdes** (PRs #2 e #3 mergeados). O stack
+  unificado espera os dois repos clonados lado a lado (`docs/deploy-stack.md`).
+- **Testes re-executados em 2026-07-26:** backend **256** e gtfs **74**, 0 falhas nos dois.
 
 ## 2. Roadmap — fatias concluídas (1–10)
 
@@ -164,8 +165,10 @@ polígonos de garagem. Por isso ficaram fora:
 
 ## 7. Próximos passos sugeridos (ordem de valor/viabilidade)
 
-0. ⏭️ **Geofence de garagem (`GARAGE_GEOFENCE`, §4.3)** — **próxima feature
-   escolhida**. Escopo e pré-requisitos na §10 deste documento.
+0. ~~**Geofence de garagem (`GARAGE_GEOFENCE`, §4.3)**~~ **Feita (fatia D)** — ver §10.
+   ⏭️ **Próxima fatia: conformidade de viagem (§11), consumindo a validação oficial da
+   SMTR** — ver §11 deste documento. Duas decisões abertas antes de codar (onde ler o
+   BigQuery; o que fazer com `segments` no payload do gtfs).
 1. ~~**Fechar débito técnico**~~ **Feito** — ver §5 (contexto Spring + ITs
    Testcontainers na CI).
 2. ~~**Popular `operators.json`** com dados reais.~~ **Feito** (de-para por
@@ -322,8 +325,10 @@ viagens**"*. Dado que corrobora a leitura certa: são **1.397** segmentos pequen
 **1.383** shapes — ~1 por shape, a sobra do corte de ~1 km (média 981 m). Excluí-los
 cortaria a ponta final de quase toda linha.
 
-A geometria tratada (`buffer`) e os flags seguem registrados na §11 das regras de negócio,
-para a fatia de validação por segmento. Custo já orçado lá: 119 KB/shape, 160,8 MB no total.
+A geometria tratada (`buffer`) e os flags seguem registrados na §11 das regras de negócio.
+⚠️ **Atualização de 2026-07-26:** aquele custo (119 KB/shape, 160,8 MB) **não vai ser
+pago** — a validação por segmento já vem pronta da SMTR e não precisamos dos buffers.
+Ver §11 deste documento.
 
 ### O que é "planejamento" (e de onde vem a regra)
 
@@ -511,3 +516,63 @@ coleção vazia com a geofence off, campos descritivos omitidos quando ausentes)
 - **Revisitar os 14 pontos de parada sem cobertura oficial** (a lacuna medida acima):
   decidir se entram como polígonos desenhados à mão ou se ficam de fora.
 - Camada oficial mais nova, quando a SMTR publicar (a atual é de 2021).
+
+---
+
+## 11. Próxima fatia — conformidade de viagem (2026-07-26: investigada, não implementada)
+
+Sessão de **2026-07-26**. O passo previsto era medir o `buffer` tratado no feed vigente e
+decidir como carregar 160,8 MB de geometria para contar segmentos cumpridos. **A medição
+foi feita e a fatia mudou de natureza: não vamos calcular nada disso.**
+
+### O que a investigação encontrou
+
+`rj-smtr.monitoramento.viagem_validacao` — a SMTR **já publica** a validação de viagem por
+segmento, por viagem, com `quantidade_segmentos_considerados`, `quantidade_segmentos_validos`,
+`quantidade_segmentos_necessarios`, `indice_validacao` e `indicador_trajeto_valido`, além dos
+indicadores regulatórios (Art. 8º). Detalhamento completo, com os números medidos, na
+**§11 de `docs/regras-de-negocio.md`**.
+
+Consequências diretas:
+
+1. **Os 160,8 MB de buffers não serão carregados.** Re-medi no feed vigente (2026-07-19) e
+   os números de 07-25 se confirmam: 119,0 KB/shape, 160,8 MB, 4,54 M vértices. Só que
+   agora são irrelevantes.
+2. **O limiar de validação não é derivável.** Testei 8 fórmulas candidatas contra 42.526
+   viagens reais: a melhor (`floor(0,9 × considerados)`) acerta 64,4%. Inventar "90%" aqui
+   seria o erro do ±15 m outra vez. O campo é **lido**, não calculado.
+3. **A premissa antiga da §11 estava imprecisa:** "é como a SMTR valida viagem" — sim, mas
+   ela mesma publica o resultado; e a `projeto_subsidio_sppo.viagem_conformidade`, que é o
+   modelo mais antigo, valida por *percentuais de sinal/distância/minuto*, não por segmento.
+   São dois modelos coexistindo no BigQuery da SMTR; o de segmento é o de `monitoramento`.
+
+### Duas decisões abertas (bloqueiam o código, não a análise)
+
+1. **Onde ler o BigQuery.** O backend hoje não fala com o BigQuery — quem fala é o
+   `sppo-gtfs-service`, cujo contrato é explicitamente *geometry only* (`CLAUDE.md` dele).
+   Ler `viagem_validacao` não é geometria. Opções: adapter BigQuery novo no backend
+   (`adapter/out/persistence`, atrás de porta, como manda a hexagonal); ampliar o escopo do
+   gtfs-service; ou um terceiro serviço de conformidade.
+2. **`segments` no payload do gtfs-service.** Está em `main` **sem toggle** (PR #3), somando
+   1,65× por shape — e, com a decisão acima, sem consumidor previsto. Tirar do default
+   (`?segments=true`), reverter, ou manter para inspeção.
+
+### Caracterização do dado (para dimensionar a fatia)
+
+```
+grão            1 linha = 1 viagem (id_viagem), partição por data
+volume          ~42,5 mil viagens SPPO/dia · 428 serviços · 3.599 veículos
+latência        D-3 (em 07-26, última partição = 07-23)
+histórico       desde 2026-05-27 (tabela nova)
+custo           ~4 MB por dia consultado (≈ US$ 0,00002); 60 dias ≈ 63 MB
+qualidade       98,8% trajeto válido · índice médio 0,9927 · 0 shape inválido no dia
+armadilha       modo = 'Ônibus SPPO' (não 'Ônibus'); 330 mil linhas com modo nulo
+```
+
+Como é D-3 e por viagem, o encaixe natural **não** é o hot path: é um endpoint/painel de
+conformidade retrospectiva (por serviço, por veículo, por dia), complementar ao tempo real.
+
+### Queries usadas
+
+Guardadas em `docs/sql/viagem-validacao.sql` (somente `SELECT`, com o custo de cada
+dry-run anotado no cabeçalho).

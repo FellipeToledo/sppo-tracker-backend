@@ -490,57 +490,132 @@ das posições (ingestão, envio, servidor), resolução de shapes
 
 ---
 
-## 11. Validação por segmento (planejado — não implementado)
+## 11. Validação de viagem por segmento — a SMTR já publica (consumir, não recalcular)
 
-Registro da regra e do dado, para quando entrar a contagem de **quantos segmentos da
-viagem o veículo cumpriu** — que é como a SMTR valida viagem, e base de subsídio.
+Esta seção planejava **implementar** a contagem de quantos segmentos da viagem o veículo
+cumpriu. Em **2026-07-26**, procurando a definição na fonte (§9), descobriu-se que a SMTR
+**já publica essa validação pronta**, em `rj-smtr.monitoramento.viagem_validacao`. A fatia
+deixa de ser "calcular" e passa a ser "consumir" — e isso **não é preferência de
+implementação, é a regra da §9**: paridade com o número que a SMTR usa vale mais que
+cálculo próprio equivalente.
 
-**Fonte:** `rj-smtr.planejamento.segmento_shape`, particionada por `feed_start_date`.
-No feed de 2026-07-24: **38.468 segmentos** em **1.412 shapes** (~27 por shape, máx. 81),
-comprimento médio **981 m**.
+### 11.1 A fonte oficial: `rj-smtr.monitoramento.viagem_validacao`
 
-| coluna | papel na validação |
+Particionada por `data`. Cada linha é **uma viagem**, já validada, com os campos que a
+§11 pretendia produzir:
+
+| coluna | descrição (da própria tabela) |
 |---|---|
-| `id_segmento` | identificador do segmento dentro do shape |
-| `segmento` / `wkt_segmento` | a linha do segmento (é o que usamos hoje para o corredor, §4.4) |
-| `buffer_completo` | área de **20 m** ao redor do segmento |
-| **`buffer`** | idem, **com tratamento para não haver interseções** entre ele e os segmentos posteriores |
-| `comprimento_segmento` | metros |
-| `indicador_tunel` | segmento em túnel (1.868 no feed) |
-| `indicador_segmento_desconsiderado` | não entra na validação (3.404 no feed) |
-| `indicador_area_prejudicada` | buffer perdeu >50% da área no tratamento (398) |
-| `indicador_segmento_pequeno` | segmento < 990 m (1.397) |
+| `quantidade_segmentos_considerados` | segmentos considerados na validação (já **com** as exclusões aplicadas) |
+| `quantidade_segmentos_validos` | segmentos com **pelo menos um sinal de GPS** — a definição oficial de "cumprido" |
+| `quantidade_segmentos_necessarios` | **mínimo** de segmentos para a viagem ser validada |
+| `indice_validacao` | razão entre válidos e considerados |
+| `indicador_trajeto_valido` | `validos >= necessarios` — o veredito de trajeto |
+| `indicador_primeiro_segmento_valido` / `..._ultimo_...` | primeiro/último segmento considerado e com GPS |
+| `datetime_partida_automatica` / `..._chegada_...` | primeiro/último GPS fora da cerca eletrônica **e dentro do buffer de um segmento** |
+| `indicador_viagem_valida` | veredito final da viagem |
+| `indicador_servico_divergente`, `indicador_shape_invalido`, `indicador_viagem_sobreposta`, `indicador_prazo_envio`, `indicador_processamento_*` | conformidade regulatória (os `processamento_*` citam **Art. 8º, I e II**) |
 
-⚠️ **É aqui — e só aqui — que os flags de exclusão valem.** `indicador_segmento_pequeno`
-(< 990 m) e o `indicador_segmento_desconsiderado` que ele alimenta existem porque não se
-afirma que um trecho curto foi *percorrido*; isso é critério de **contagem de segmento
-cumprido**, não de estar ou não no itinerário. A §4.4 não os usa: lá o corredor é o shape
-inteiro.
+Traz ainda `servico`, `consorcio`, `sentido`, `shape_id`, `trip_id`, `route_id`,
+`id_veiculo`, `distancia_planejada`, `velocidade_media`, `tipo_dia`, `feed_version`.
 
-⚠️ **Aqui o `buffer` tratado é obrigatório** — e é a segunda diferença em relação à §4.4. Para o
-booleano "está na rota", medimos que a **união** dos buffers tratados e a dos completos têm
-área idêntica (100,00%), então a linha + 20 m basta. Mas para **atribuir** um ponto a **um**
-segmento — que é o que a contagem exige — o tratamento é justamente o que remove a
-ambiguidade nas sobreposições entre segmentos vizinhos. Sem ele, um ponto na emenda contaria
-para dois segmentos.
+**Medido em 2026-07-26** (dry-run antes; ≈ US$ 0,0002 no total):
 
-**Custo a orçar quando a fatia entrar** (medido em 2026-07-25, WKT médio por shape):
+```
+modo = 'Ônibus SPPO'   1.700.973 viagens, de 2026-05-27 a 2026-07-23
+latência               D-3 (última partição 07-23; atualizada em 07-26 08:05)
+dia 2026-07-23         42.526 viagens · 428 serviços · 3.599 veículos
+                       42.006 trajeto válido (98,8%) · 41.478 viagem válida (97,5%)
+                       índice de validação médio 0,9927
+                       considerados 21,3 · válidos 21,1 · necessários 19,07 (médias)
+```
+
+⚠️ `modo` é **`'Ônibus SPPO'`**, não `'Ônibus'` (o filtro errado devolve zero linhas em
+silêncio — foi o primeiro resultado desta investigação). Há também `'BRT'`,
+`'Ônibus Executivo'` e **330 mil linhas com `modo` nulo** no período.
+
+⚠️ **Dado retrospectivo, D-3.** Não substitui nada do hot path: `OUT_OF_ROUTE` (§4.4) e os
+eventos de desvio (§5) seguem em tempo real, a partir da geometria. Esta seção é análise de
+conformidade *depois* da viagem.
+
+### 11.2 O limiar não é derivável — tem de ser lido
+
+`quantidade_segmentos_necessarios` **não sai de fórmula simples**. Testado no dia
+2026-07-23 (42.526 viagens), percentual de viagens em que cada candidata acerta:
+
+```
+floor(0,9 × considerados)   64,4%   <- a melhor, e ainda erra 1 em 3
+ceil (0,9 × considerados)   45,4%
+considerados - 2            38,8%
+considerados - 1            26,6%
+ceil (0,8 × considerados)    8,3%
+round(0,8 × considerados)    6,4%
+floor(0,8 × considerados)    3,0%
+necessarios >= considerados   0,0%   <- nunca exige todos os segmentos
+```
+
+A razão `necessarios/considerados` varia de **0,50 a 0,93** (média 0,89), e
+`considerados` vai de 2 a 75. Portanto: **ler o campo, nunca reproduzir a regra.**
+Inventar aqui um "90%" seria repetir exatamente o erro do corredor de ±15 m (§9).
+
+### 11.3 O que isso cancela
+
+A conclusão anterior — carregar o `buffer` tratado e atribuir ponto→segmento por conta
+própria — **fica sem motivo**, e era caro:
 
 ```
 shape inteiro          7,9 KB
-linhas segmentadas    13,1 KB   (1,65x)   <- o que usamos hoje
-buffers tratados     119,0 KB   (15x)     <- necessário para atribuição por segmento
-total dos buffers    160,8 MB  (~4,6 M vértices)
+linhas segmentadas    13,1 KB   (1,65x)
+buffers tratados     119,0 KB   (15x)  · p95 214,3 KB · máx 323,8 KB
+total dos buffers    160,8 MB  (4,54 M vértices)   <- não precisamos carregar nada disso
 ```
 
-Com `mem_limit: 1g` por container, isso cabe, mas exige decisão explícita: servir buffer
-sob demanda por linha (em vez de índice completo), ou mover a atribuição para o
-`sppo-gtfs-service`, que já tem a geometria. **Não** dimensionar por estimativa: medir de
-novo no feed vigente antes de implementar.
+(Re-medido em 2026-07-26 no feed vigente — 229 MiB varridos, ≈ US$ 0,0011 — e reproduz
+exatamente a medição de 07-25: 119,0 KB/shape e 160,8 MB.)
 
-**Base já pronta, não mergeada:** a branch `feat/segment-exclusions` do `sppo-gtfs-service`
-carrega os segmentos com os flags para dentro do índice e os expõe no payload por shape
-(porta `loadShapeSegments`, query do `segmento_shape` com a mesma seleção de feed/lookback,
-`RouteSegment` no domínio, 74 testes verdes). Ficou **fora da `main` de propósito**: soma
-1,65× ao payload de todo shape e não tem consumidor enquanto esta fatia não existir. Falta
-nela apenas a geometria do `buffer` tratado, que é o que a atribuição ponto→segmento exige.
+Além do custo, a atribuição própria **divergiria** do número oficial: "cumprido" na SMTR é
+*ter pelo menos um sinal de GPS no buffer do segmento*, contado sobre os segmentos que ela
+considera, com um limiar que não conseguimos derivar (11.2).
+
+### 11.4 O que `segmento_shape` continua sendo
+
+`rj-smtr.planejamento.segmento_shape` segue sendo a **origem da largura de 20 m** do
+corredor da §4.4 (`buffer_completo` = *"Área de 20m ao redor do segmento"*) — é só isso
+que consumimos dela. Feed vigente medido em **2026-07-26**:
+
+| | feed `2026-07-19` (vigente) | feed `2026-07-05` (anterior) |
+|---|---|---|
+| shapes | 1.383 | 1.412 |
+| segmentos | 37.692 (27,3/shape) | 38.468 |
+| `indicador_tunel` | 1.786 | 1.868 |
+| `indicador_segmento_desconsiderado` | 3.286 | 3.404 |
+| `indicador_segmento_pequeno` | 1.368 | 1.397 |
+| `indicador_area_prejudicada` | 388 | 398 |
+| comprimento médio | 982 m | 981 m |
+
+⚠️ Correção: os números antes registrados aqui como *"feed de 2026-07-24"* são do feed
+**`feed_start_date = 2026-07-05`**. `2026-07-24` era o `feed_version` (timestamp de
+publicação) daquele feed. Partição e versão são coisas diferentes — o vigente é o de
+`feed_start_date` máximo com `feed_end_date` nulo.
+
+⚠️ Detalhe não registrado antes: `indicador_tunel` tem **vigência**
+(`inicio_vigencia_tunel` / `fim_vigencia_tunel`). No feed vigente, todos os 1.786
+segmentos de túnel têm início preenchido e **nenhum** tem fim — a vigência é aberta. Quem
+usar o flag por data de viagem precisa respeitar a janela, não só o booleano.
+
+Os flags de exclusão continuam **não** valendo para o corredor da §4.4 (lá o corredor é o
+shape inteiro a 20 m) — e agora também não valem para nós na validação, porque quem os
+aplica é a SMTR, dentro de `quantidade_segmentos_considerados`.
+
+### 11.5 Estado do groundwork no `sppo-gtfs-service`
+
+⚠️ **Correção de status:** a branch `feat/segment-exclusions` **está mergeada em `main`**
+(PR #3, commit `353c41f`, 2026-07-25 17:28) — o texto anterior desta seção dizia que
+ficara fora de propósito, e foi escrito 3 minutos antes do merge. Hoje `EncodedShapeDto`
+serializa `segments` **sem toggle**, ou seja: o payload de **1,65×** por shape está valendo
+em produção, e com o 11.1 ele deixa de ter consumidor previsto.
+
+**A decidir** (não decidido nesta sessão): tirar `segments` do payload default — por
+parâmetro (`?segments=true`) ou revertendo — ou mantê-lo para inspeção. E, para consumir o
+11.1: onde encaixar a leitura da `viagem_validacao`, já que o backend hoje não fala com o
+BigQuery (quem fala é o `sppo-gtfs-service`, e o contrato dele é *geometry only*).
