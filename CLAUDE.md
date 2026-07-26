@@ -29,6 +29,9 @@ docker compose up -d --build          # stack deste repo (backend + Redis + Post
 docker compose -f docker-compose.stack.yml --env-file .env.stack up -d --build   # + sppo-gtfs-service
 ```
 
+Só o segundo liga `OUT_OF_ROUTE` e os desvios (o default de `ROUTE_SHAPE_SOURCE` é
+`disabled`). Passo a passo, pré-requisitos e como validar: **`docs/rodar-local.md`**.
+
 ## Arquitetura
 
 Pacote raiz `com.fajtech.sppotracker`. Três camadas, dependências sempre
