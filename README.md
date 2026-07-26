@@ -8,6 +8,8 @@ Monólito modular com **arquitetura hexagonal**. Sem credencial de provider.
 
 ## Documentação
 
+- **`docs/rodar-local.md`** — **como subir com Docker na sua máquina** e conferir que
+  está funcionando (inclui como validar o `OUT_OF_ROUTE`). Comece por aqui.
 - **`docs/regras-de-negocio.md`** — especificação funcional completa (a fonte da
   verdade do domínio: ingestão, classificação, desvio de rota, thresholds).
 - **`docs/estado-do-projeto.md`** — **onde o projeto parou**: o que está pronto, o
@@ -32,10 +34,16 @@ Data JPA + Flyway (Postgres) · Actuator · Micrometer/Prometheus · JUnit 5.
 
 ## Rodando
 
+Guia completo (os dois modos, verificação e problemas comuns):
+**[`docs/rodar-local.md`](docs/rodar-local.md)**.
+
 ```bash
-# stack completa (backend + Redis + Postgres), sem segredo:
+# backend + Redis + Postgres, sem segredo (OUT_OF_ROUTE desligado):
 docker compose up -d --build
 curl -s http://localhost:8090/actuator/health
+
+# com geometria — soma o sppo-gtfs-service e liga OUT_OF_ROUTE + desvios:
+docker compose -f docker-compose.stack.yml --env-file .env.stack up -d --build
 
 # ou local (precisa de Redis:6379 e Postgres:5432):
 mvn spring-boot:run
